@@ -113,6 +113,97 @@ object LogicalPlan {
       case _ => false
     }
   }
+  implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
+    import Diff._
+    override def diff
+      (left: Term[LogicalPlan], right: Term[LogicalPlan]):
+        Diff[LogicalPlan] =
+      (left.unFix, right.unFix) match {
+        case (l@Read0(path1), r@Read0(path2)) =>
+          if (path1 == path2)
+            Same[LogicalPlan](l)
+          else
+            LocallyDifferent[LogicalPlan](l, r)
+        case (l@Constant0(x1), r@Constant0(x2)) =>
+          if (x1 == x2)
+            Same[LogicalPlan](l)
+          else
+            LocallyDifferent[LogicalPlan](l, r)
+        case (
+          l@Join0(left1, right1, tpe1, rel1, lproj1, rproj1),
+          r@Join0(left2, right2, tpe2, rel2, lproj2, rproj2)) => {
+          // TODO: should replace this with
+          // (Join0(_, _, tpe1, rel1, _, _)
+          //   <$> diff(left1, left2) <*> diff(right1, right2)
+          //   <*> diff(lproj1, lproj2) <*> diff(rproj1, rproj2))
+          val (left, right, lproj, rproj) =
+            (diff(left1, left2), diff(right1, right2),
+              diff(lproj1, lproj2), diff(rproj1, rproj2))
+          if (tpe1 == tpe2 && rel1 == rel2) {
+            (left, right, lproj, rproj) match {
+              case (Same(_), Same(_), Same(_), Same(_)) =>
+                Same(l)
+              case _ =>
+                Similar(Join0(left, right, tpe1, rel1, lproj, rproj))
+            }
+          }
+          else
+            LocallyDifferent[LogicalPlan](
+              Join0(left, right, tpe1, rel1, lproj, rproj),
+              r)
+        }
+        case (l@Invoke0(func1, values1), r@Invoke0(func2, values2)) =>
+          // FIXME: this probably breaks when there are different arities
+          val values = (values1, values2).zipped map diff
+          if (func1 == func2)
+            if (Nil == values.filter(_ match {
+              case Same(_) => false
+              case _       => true
+            }))
+              Same(l)
+            else
+              Similar(Invoke0(func1, values))
+          else
+            LocallyDifferent[LogicalPlan](Invoke0(func1, values), r)
+        case (l@Free0(name1), r@Free0(name2)) =>
+          if (name1 == name2)
+            Same[LogicalPlan](l)
+          else
+            LocallyDifferent[LogicalPlan](l, r)
+        case (l@Let0(ident1, form1, in1), r@Let0(ident2, form2, in2)) =>
+          val (form, in) = (diff(form1, form2), diff(in1, in2))
+          if (ident1 == ident2) {
+            (form, in) match {
+              case (Same(_), Same(_)) => Same(l)
+              case _ => Similar(Let0(ident1, form, in))
+            }
+          }
+          else
+            LocallyDifferent[LogicalPlan](Let0(ident1, form, in), r)
+        case (l, r) => Different(l, r)
+      }
+  }
+
+  // implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
+  //   import Diffable._
+  //   override def diffImpl
+  //     (left: LogicalPlan[Unit], right: LogicalPlan[Unit]): DiffType =
+  //     (left, right) match {
+  //       case (Read0(path1), Read0(path2)) =>
+  //         if (path1 == path2) Same else Different
+  //       case (Constant0(x1), Constant0(x2)) =>
+  //         if (x1 == x2) Same else Different
+  //       case (Join0(_, _, tpe1, rel1, _, _), Join0(_, _, tpe2, rel2, _, _)) =>
+  //         if (tpe1 == tpe2 && rel1 == rel2) Same else Different
+  //       case (Invoke0(func1, _), Invoke0(func2, _)) =>
+  //         if (func1 == func2) Same else Different
+  //       case (Free0(name1), Free0(name2)) =>
+  //         if (name1 == name2) Same else Different
+  //       case (Let0(ident1, _, _), Let0(ident2, _, _)) =>
+  //         if (ident1 == ident2) Same else Different
+  //       case _ => DifferentShape
+  //     }
+  // }
 
   import slamdata.engine.analysis.fixplate.{Attr => FAttr}
 

@@ -121,23 +121,20 @@ trait DisjunctionMatchers {
 
 trait TermLogicalPlanMatchers {
   import slamdata.engine.analysis.fixplate._
-  import slamdata.engine.fp._
   import slamdata.engine.analysis._
-  import slamdata.engine.RenderTree
 
   case class equalToPlan(expected: Term[LogicalPlan]) extends Matcher[Term[LogicalPlan]] {
     val equal = Equal[Term[LogicalPlan]].equal _
 
     def apply[S <: Term[LogicalPlan]](s: Expectable[S]) = {
-      def diff(l: S, r: Term[LogicalPlan]): String = {
-        val lt = RenderTree[Term[LogicalPlan]].render(l)
-        val rt = RenderTree[Term[LogicalPlan]].render(r)
-        RenderTree.show(lt diff rt)(new RenderTree[RenderedTree] { override def render(v: RenderedTree) = v }).toString
-      }
-      result(equal(expected, s.value),
-             "\ntrees are equal:\n" + diff(s.value, expected),
-             "\ntrees are not equal:\n" + diff(s.value, expected),
-             s)
+      result(
+        equal(expected, s.value),
+        "\nthe trees are equal",
+        "\nthe trees are not equal:\n" +
+          Show[Diff[LogicalPlan]].show(LogicalPlan.LogicalPlanDiff.diff(
+            expected,
+            s.value)),
+        s)
     }
   }
 }
