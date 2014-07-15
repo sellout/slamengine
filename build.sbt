@@ -23,6 +23,8 @@ initialize := {
 
 addCompilerPlugin("org.brianmckenna" %% "wartremover" % "0.10")
 
+addCompilerPlugin("org.spire-math" % "kind-projector_2.10" % "0.5.2")
+
 scalacOptions ++= Seq(
   "-Xfatal-warnings",
   "-deprecation",
@@ -39,7 +41,8 @@ resolvers ++= Seq(
   Resolver.sonatypeRepo("releases"), 
   Resolver.sonatypeRepo("snapshots"),
   "JBoss repository" at "https://repository.jboss.org/nexus/content/repositories/",
-  "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
+  "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases",
+  "bintray/non" at "http://dl.bintray.com/non/maven"
 )
 
 ScoverageSbtPlugin.instrumentSettings
