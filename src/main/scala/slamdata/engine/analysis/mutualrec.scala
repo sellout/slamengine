@@ -10,18 +10,26 @@ sealed trait hTerm {
 
   case class HTerm[H[_[_], _], Ix](hunFix: H[HTerm[H, ?], Ix])
 
-  // def hfrom[Phi[_], Ix](phi: Phi[Ix], index: Ix)
-  //   (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
-  //     HTerm[λ[(F[_], A) => Pf[Phi, F, A]], Ix] =
-  //   fold[Phi, Ix, HTerm[λ[(F[_], A) => Pf[Phi, F, A]], ?]](phi, index)((
-  //     _: Phi[Ix],
-  //     x: λ[(F[_], A) => Pf[Phi, F, A]][HTerm[λ[(F[_], A) => Pf[Phi, F, A]], ?], Ix]) =>
-  //     HTerm(x))
+  def hfrom[Phi[_], Ix](phi: Phi[Ix], index: Ix)
+    (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
+      HTerm[λ[(F[_], A) => Pf[Phi, F, A]], Ix] = {
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type PartHTerm[A] = HTerm[PartPf, A]
+    fold[Phi, Ix, PartHTerm](phi, index)(new Algebra[Phi, PartHTerm] {
+      def apply[Ix](p: Phi[Ix], x: Pf[Phi, PartHTerm, Ix]) =
+        HTerm[PartPf, Ix](x)
+    })
+  }
 
-  // def hto[Phi[_], Ix](phi: Phi[Ix], pf: HTerm[λ[(F[_], A) => Pf[Phi, F, A]], Ix])
-  //   (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
-  //     Ix =
-  //   unfold[Phi, Ix, HTerm[λ[(F[_], A) => Pf[Phi, F, A]], ?]](phi, pf)((_, x) => x.hunFix)
+  def hto[Phi[_], Ix](phi: Phi[Ix], pf: HTerm[λ[(F[_], A) => Pf[Phi, F, A]], Ix])
+    (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
+      Ix = {
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type PartHTerm[A] = HTerm[PartPf, A]
+    unfold[Phi, Ix, PartHTerm](phi, pf)(new CoAlgebra[Phi, PartHTerm] {
+      def apply[Ix](p: Phi[Ix], x: PartHTerm[Ix]) = x.hunFix
+    })
+  }
 
   // Constructor
 
@@ -53,8 +61,8 @@ sealed trait hTerm {
       extends Sum[Nothing, G, R, Ix]
   case class Product[F[_[_], _], G[_[_], _], R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
   case class Tag[F[_[_], _], Ix0, R[_], Ix](untag: F[R, Ix0])
-  case class Compose[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
-  case class Construct[C, F[_[_], _], R[_], Ix](unC: F[R, Ix])
+  case class D[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
+  case class C[C, F[_[_], _], R[_], Ix](unC: F[R, Ix])
 
   case class I0[A](unI0: A)
   case class K0[A, B](unK0: A)
@@ -73,7 +81,7 @@ sealed trait hTerm {
   trait Pf[Phi[_], F[_], A]
 
   trait El[Phi[_], Ix] {
-    def proof: Phi[Ix]
+    val proof: Phi[Ix]
   }
 
   trait Fam[Phi[_]] {
@@ -173,18 +181,24 @@ sealed trait hTerm {
   trait Algebra0[Phi[_], F[_[_], _], R[_]] {
     def apply[Ix](p: Phi[Ix], x: F[R, Ix]): R[Ix]
   }
-  type Algebra[Phi[_], R[_]] =
-    Algebra0[Phi, λ[(F[_], A) => Pf[Phi, F, A]], R]
+  type Algebra[Phi[_], R[_]] =({
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type Out = Algebra0[Phi, PartPf, R]
+  })#Out
   trait AlgebraF0[Phi[_], F[_[_], _], G[_], R[_]] {
     def apply[Ix](p: Phi[Ix], x: F[R, Ix]): G[R[Ix]]
   }
-  type AlgebraF[Phi[_], G[_], R[_]] =
-    AlgebraF0[Phi, λ[(F[_], A) => Pf[Phi, F, A]], G, R]
+  type AlgebraF[Phi[_], G[_], R[_]] = ({
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type Out = AlgebraF0[Phi, PartPf, G, R]
+  })#Out
 
   def fold[Phi[_], Ix, R[_]](p: Phi[Ix], x: Ix)(f: Algebra[Phi, R])
     (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
-      R[Ix] =
-    f(p, hmap[Phi, I0, R, Ix, λ[(F[_], A) => Pf[Phi, F, A]]](p, Fp.from(p, x))((p, x) => fold(p, x.unI0)(f)))
+      R[Ix] = {
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    f(p, hmap[Phi, I0, R, Ix, PartPf](p, Fp.from(p, x))((p, x) => fold(p, x.unI0)(f)))
+  }
 
   def foldM[Phi[_], Ix, R[_], M[_]](p:Phi[Ix], x: Ix)(f: AlgebraF[Phi, M, R])
     (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]], Mm: Monad[M]):
@@ -194,20 +208,31 @@ sealed trait hTerm {
   trait CoAlgebra0[Phi[_], F[_[_], _], R[_]] {
     def apply[Ix](p: Phi[Ix], x: R[Ix]): F[R, Ix]
   }
-  type CoAlgebra[Phi[_], R[_]] = CoAlgebra0[Phi, λ[(F[_], A) => Pf[Phi, F, A]], R]
+  type CoAlgebra[Phi[_], R[_]] = ({
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type Out = CoAlgebra0[Phi, PartPf, R]
+  })#Out
   trait CoAlgebraF0[Phi[_], F[_[_], _], G[_], R[_]] {
     def apply[Ix](p: Phi[Ix], x: R[Ix]): G[F[R, Ix]]
   }
-  type CoAlgebraF[Phi[_], G[_], R[_]] = CoAlgebraF0[Phi, λ[(F[_], A) => Pf[Phi, F, A]], G, R]
+  type CoAlgebraF[Phi[_], G[_], R[_]] = ({
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    type Out = CoAlgebraF0[Phi, PartPf, G, R]
+  })#Out
 
   def unfold[Phi[_], Ix, R[_]](p: Phi[Ix], x: R[Ix])(f: CoAlgebra[Phi, R])
     (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, λ[(F[_], A) => Pf[Phi, F, A]]]):
-      Ix =
-    Fp.to(p, hmap[Phi, R, I0, Ix, λ[(F[_], A) => Pf[Phi, F, A]]](p, f(p, x))((p, x) => I0(unfold(p, x)(f))))
+      Ix = {
+    type PartPf[F[_], A] = Pf[Phi, F, A]
+    Fp.to(p, hmap[Phi, R, I0, Ix, PartPf](p, f(p, x))((p, x) => I0(unfold(p, x)(f))))
+  }
 
-  // def unfoldM[Phi[_], Ix, R[_], M[_]](p: Phi[Ix], x: R[Ix])(f: CoAlgebraF[Phi, M, R])
-  //   (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, ({type λ[F[_], A] = Pf[Phi, F, A]})#λ], Mm: Monad[M]):
-  //     M[Ix] =
-  //   Mm.bind(f(p, x))(Fp.to(p, hmap(p, _)((p, x) => liftM(I0, unfoldM(p, x)(f)))).liftM)
+  def unfoldM[Phi[_], Ix, R[_], M[_]](p: Phi[Ix], x: R[Ix])(f: CoAlgebraF[Phi, M, R])
+    (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, ({type λ[F[_], A] = Pf[Phi, F, A]})#λ], Mm: Monad[M]):
+      M[Ix] =
+    Mm.bind(f(p, x))(
+      Mm.lift((pf: Pf[Phi, I0, Ix]) => Fp.to(p, pf)) compose
+      (y => Hp.hmapA(p, y)((p, x) => Mm.lift((a: Ix) => I0(a))(unfoldM(p, x)(f)))))
 
 }
+object mutualrec extends hTerm
