@@ -31,7 +31,7 @@ sealed trait hTerm {
 
   // Constructor
 
-  trait Constructor[C] {
+  trait Constructor {
     val name: String
     val fixity: Fixity = Prefix
     // def name[T[_, _, _, _], R[_], Ix](x: T[C, F[_[_], _], R[_], Ix]):
