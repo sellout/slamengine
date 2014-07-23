@@ -52,6 +52,34 @@ sealed trait HConstructor {
 
 sealed trait Base extends HConstructor {
 
+  case class IQ[Xi, R[_], Ix](unI: R[Xi])
+  case class KQ[A, R[_], Ix](unK: A)
+  case class UQ[R[_], Ix]()
+  sealed trait SumQ[F[_[_], _], G[_[_], _], R[_], Ix]
+  case class LQ[F[_[_], _], R[_], Ix](unL: F[R, Ix]) extends SumQ[F, Nothing, R, Ix]
+  case class RQ[G[_[_], _], R[_], Ix](unR: G[R, Ix]) extends SumQ[Nothing, G, R, Ix]
+  case class ProductQ[F[_[_], _], G[_[_], _], R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
+  case class TagQ[F[_[_], _], Ix0, R[_], Ix](unTag: F[R, Ix0])
+  case class DQ[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
+  case class CQ[Con, F[_[_], _], R[_], Ix](unC: F[R, Ix])
+
+  trait IT[Xi] { type Rec[R[_], Ix] = IQ[Xi, R, Ix] }
+  trait KT[A]  { type Rec[R[_], Ix] = KQ[A, R, Ix] }
+  trait SumT[F[_[_], _], G[_[_], _]] {
+    type Rec[R[_], Ix] = SumQ[F, G, R, Ix]
+    type L[R[_], Ix] = LQ[F, R, Ix]
+    type R[R[_], Ix] = RQ[G, R, Ix]
+  }
+  trait ProductT[F[_[_], _], G[_[_], _]] {
+    type Rec[R[_], Ix] = ProductQ[F, G, R, Ix]
+  }
+  trait TagT[F[_[_], _], Ix0] {
+    type Rec[R[_], Ix] = TagQ[F, Ix0, R, Ix]
+  }
+  trait DT[F[_], G[_[_], _]] { type Rec[R[_], Ix] = DQ[F, G, R, Ix] }
+  trait CT[Con, F[_[_], _]] { type Rec[R[_], Ix] = CQ[Con, F, R, Ix]}
+
+
   case class I[Xi]() { case class Rec[R[_], Ix](unI: R[Xi]) }
   case class K[A]()  { case class Rec[R[_], Ix](unK: A) }
   // NB: I would nest this for consistency, but Scala doesn’t like when the
@@ -69,7 +97,34 @@ sealed trait Base extends HConstructor {
     case class Rec[R[_], Ix](unTag: F[R, Ix0])
   }
   case class D[F[_], G[_[_], _]]() { case class Rec[R[_], Ix](unD: F[G[R, Ix]]) }
-  case class C[C, F[_[_], _]]()    { case class Rec[R[_], Ix](unC: F[R, Ix]) }
+  case class C[Con, F[_[_], _]]() { case class Rec[R[_], Ix](unC: F[R, Ix]) }
+
+  // aliases for pattern matching / constructing
+  class PMC[Ix] {
+    def IX[Xi] = I[Xi].Rec[I0, Ix] _
+    def KX[A] = K[A].Rec[I0, Ix] _
+    def UX = U[I0, Ix] _
+    def SumL[F[_[_], _]] = Sum[F, Nothing].L[I0, Ix] _
+    def SumR[G[_[_], _]] = Sum[Nothing, G].R[I0, Ix] _
+    def ProductX[F[_[_], _], G[_[_], _]] = Product[F, G].Rec[I0, Ix] _
+    def TagX[F[_[_], _], Ix0] = Tag[F, Ix0].Rec[I0, Ix] _
+    def DX[F[_], G[_[_], _]] = D[F, G].Rec[I0, Ix] _
+    def CX[Con, F[_[_], _]] = C[Con, F].Rec[I0, Ix] _
+  }
+
+  def IX[Xi, Ix] = I[Xi].Rec[I0, Ix] _
+  def KX[A, Ix] = K[A].Rec[I0, Ix] _
+  def UX[Ix] = U[I0, Ix] _
+  class SumL[F[_[_], _], Ix] {
+    val sum = Sum[F, Nothing]()
+    val apply = Sum[F, Nothing].L[I0, Ix] _
+    def unapply(s: sum.L[I0, Ix]): Option[F[I0, Ix]] = Some(s.unL)
+  }
+  def SumR[G[_[_], _], Ix] = Sum[Nothing, G].R[I0, Ix] _
+  def ProductX[F[_[_], _], G[_[_], _], Ix] = Product[F, G].Rec[I0, Ix] _
+  def TagX[F[_[_], _], Ix0, Ix] = Tag[F, Ix0].Rec[I0, Ix] _
+  def DX[F[_], G[_[_], _], Ix] = D[F, G].Rec[I0, Ix] _
+  def CX[Con, F[_[_], _], Ix] = C[Con, F].Rec[I0, Ix] _
 
   case class I0[A](unI0: A)
   case class K0[A]() { case class Rec[B](unK0: A) }
