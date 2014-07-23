@@ -80,7 +80,8 @@ sealed trait Base extends HConstructor {
   }
 
   implicit def K0Functor[X] = new Functor[K0[X]#Rec] {
-    def map[A, B](fa: K0[X]#Rec[A])(f: A => B) = K0[X].Rec(fa.unK0)
+    val K0X = K0[X]()
+    def map[A, B](fa: K0[X]#Rec[A])(f: A => B) = K0X.Rec(fa.unK0)
   }
 
   trait PfResolver[Phi[_]] { type Pf[F[_], A] }
@@ -119,12 +120,13 @@ sealed trait HFunctor extends HConstructor with Base {
   //   }
 
   implicit def KHFunctor[Phi[_], X]() = new HFunctor[Phi, K[X]#Rec] {
-      def hmapA[R[_], R0[_], Ix, A[_]]
-        (p: Phi[Ix], x: K[X]#Rec[R, Ix])
-        (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
-        (implicit A: Applicative[A]) =
-        A.point(K[X].Rec[R0, Ix](x.unK))
-    }
+    val KX = K[X]()
+    def hmapA[R[_], R0[_], Ix, A[_]]
+      (p: Phi[Ix], x: K[X]#Rec[R, Ix])
+      (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
+      (implicit A: Applicative[A]) =
+      A.point(KX.Rec[R0, Ix](x.unK))
+  }
   
 
   implicit def UHFunctor[Phi[_]]() = new HFunctor[Phi, U] {
@@ -169,21 +171,23 @@ sealed trait HFunctor extends HConstructor with Base {
   implicit def DHFunctor[Phi[_], F[_], G[_[_], _]]
     (implicit Tf: Traverse[F], Hg: HFunctor[Phi, G]) =
     new HFunctor[Phi, D[F, G]#Rec] {
+      val DFG = D[F, G]()
       def hmapA[R[_], R0[_], Ix, A[_]]
         (p: Phi[Ix], x: D[F, G]#Rec[R, Ix])
         (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
         (implicit Aa: Applicative[A]) =
-        Aa.ap(Tf.traverse(x.unD)(y => Hg.hmapA(p, y)(f)))(Aa.point(D[F, G].Rec[R0, Ix](_)))
+        Aa.ap(Tf.traverse(x.unD)(y => Hg.hmapA(p, y)(f)))(Aa.point(DFG.Rec[R0, Ix](_)))
     }
 
   implicit def ConstructorHFunctor[Phi[_], Cp <: Constructor, F[_[_], _]]
     (implicit Hf: HFunctor[Phi, F]) = new HFunctor[Phi, C[Cp, F]#Rec] {
-      def hmapA[R[_], R0[_], Ix, A[_]]
-        (p: Phi[Ix], x: C[Cp, F]#Rec[R, Ix])
-        (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
-        (implicit A: Applicative[A]) =
-        A.ap(Hf.hmapA(p, x.unC)(f))(A.point(C[Cp, F].Rec[R0, Ix](_)))
-    }
+    val CCF = C[Cp, F]()
+    def hmapA[R[_], R0[_], Ix, A[_]]
+      (p: Phi[Ix], x: C[Cp, F]#Rec[R, Ix])
+      (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
+      (implicit A: Applicative[A]) =
+      A.ap(Hf.hmapA(p, x.unC)(f))(A.point(CCF.Rec[R0, Ix](_)))
+  }
 
   def hmap[Phi[_], R[_], R0[_], Ix, F[_[_], _]]
     (p: Phi[Ix], x: F[R, Ix])
