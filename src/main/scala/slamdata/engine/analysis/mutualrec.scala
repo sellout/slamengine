@@ -86,9 +86,7 @@ sealed trait Base extends HConstructor {
 
   trait PfResolver[Phi[_]] { type Pf[F[_], A] }
 
-  trait El[Phi[_], Ix] {
-    val proof: Phi[Ix]
-  }
+  trait El[Phi[_], Ix] { val proof: Phi[Ix] }
 
   trait Fam[Phi[_]] {
     def from[Ix](phi: Phi[Ix], index: Ix): PfResolver[Phi]#Pf[I0, Ix]
