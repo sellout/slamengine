@@ -4,6 +4,7 @@ import slamdata.engine.fp._
 
 import scalaz._
 import Scalaz._
+import Leibniz._
 
 sealed trait HFix extends Base with HFunctor with Fold {
 
@@ -52,79 +53,204 @@ sealed trait HConstructor {
 
 sealed trait Base extends HConstructor {
 
-  case class IQ[Xi, R[_], Ix](unI: R[Xi])
-  case class KQ[A, R[_], Ix](unK: A)
-  case class UQ[R[_], Ix]()
-  sealed trait SumQ[F[_[_], _], G[_[_], _], R[_], Ix]
-  case class LQ[F[_[_], _], R[_], Ix](unL: F[R, Ix]) extends SumQ[F, Nothing, R, Ix]
-  case class RQ[G[_[_], _], R[_], Ix](unR: G[R, Ix]) extends SumQ[Nothing, G, R, Ix]
-  case class ProductQ[F[_[_], _], G[_[_], _], R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
-  case class TagQ[F[_[_], _], Ix0, R[_], Ix](unTag: F[R, Ix0])
-  case class DQ[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
-  case class CQ[Con, F[_[_], _], R[_], Ix](unC: F[R, Ix])
+  case class I[Xi, R[_], Ix](unI: R[Xi])
+  case class K[A, R[_], Ix](unK: A)
+  case class U[R[_], Ix]()
+  sealed trait Sum[F[_[_], _], G[_[_], _], R[_], Ix]
+  case class Lef[F[_[_], _], R[_], Ix](unL: F[R, Ix]) extends Sum[F, Nothing, R, Ix]
+  case class Righ[G[_[_], _], R[_], Ix](unR: G[R, Ix]) extends Sum[Nothing, G, R, Ix]
+  case class Product[F[_[_], _], G[_[_], _], R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
+  case class Tag[F[_[_], _], Ix0, R[_], Ix](unTag: F[R, Ix0])
+  case class D[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
+  case class C[Con, F[_[_], _], R[_], Ix](unC: F[R, Ix])
 
-  trait IT[Xi] { type Rec[R[_], Ix] = IQ[Xi, R, Ix] }
-  trait KT[A]  { type Rec[R[_], Ix] = KQ[A, R, Ix] }
+  trait IT[Xi] { type Rec[R[_], Ix] = I[Xi, R, Ix] }
+  trait KT[A]  { type Rec[R[_], Ix] = K[A, R, Ix] }
   trait SumT[F[_[_], _], G[_[_], _]] {
-    type Rec[R[_], Ix] = SumQ[F, G, R, Ix]
-    type L[R[_], Ix] = LQ[F, R, Ix]
-    type R[R[_], Ix] = RQ[G, R, Ix]
+    type Rec[R[_], Ix] = Sum[F, G, R, Ix]
+  }
+  trait LefT[F[_[_], _]] {
+    type Rec[R[_], Ix] = Lef[F, R, Ix]
+  }
+  trait RighT[G[_[_], _]] {
+    type Rec[R[_], Ix] = Righ[G, R, Ix]
   }
   trait ProductT[F[_[_], _], G[_[_], _]] {
-    type Rec[R[_], Ix] = ProductQ[F, G, R, Ix]
+    type Rec[R[_], Ix] = Product[F, G, R, Ix]
   }
   trait TagT[F[_[_], _], Ix0] {
-    type Rec[R[_], Ix] = TagQ[F, Ix0, R, Ix]
+    type Rec[R[_], Ix] = Tag[F, Ix0, R, Ix]
   }
-  trait DT[F[_], G[_[_], _]] { type Rec[R[_], Ix] = DQ[F, G, R, Ix] }
-  trait CT[Con, F[_[_], _]] { type Rec[R[_], Ix] = CQ[Con, F, R, Ix]}
+  trait DT[F[_], G[_[_], _]] { type Rec[R[_], Ix] = D[F, G, R, Ix] }
+  trait CT[Con, F[_[_], _]] { type Rec[R[_], Ix] = C[Con, F, R, Ix] }
 
+  trait UnapplyH[A] {
+    type F[_[_], _]
+    type R[_]
+    type Ix
 
-  case class I[Xi]() { case class Rec[R[_], Ix](unI: R[Xi]) }
-  case class K[A]()  { case class Rec[R[_], Ix](unK: A) }
-  // NB: I would nest this for consistency, but Scala doesn’t like when the
-  //     container is either a case object, or a case class without type params
-  case class U[R[_], Ix]()
-  case class Sum[F[_[_], _], G[_[_], _]]() {
-    sealed trait Rec[R[_], Ix]
-    case class L[R[_], Ix](unL: F[R, Ix]) extends Rec[R, Ix]
-    case class R[R[_], Ix](unR: G[R, Ix]) extends Rec[R, Ix]
-  }
-  case class Product[F[_[_], _], G[_[_], _]]() {
-    case class Rec[R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
-  }
-  case class Tag[F[_[_], _], Ix0]() {
-    case class Rec[R[_], Ix](unTag: F[R, Ix0])
-  }
-  case class D[F[_], G[_[_], _]]() { case class Rec[R[_], Ix](unD: F[G[R, Ix]]) }
-  case class C[Con, F[_[_], _]]() { case class Rec[R[_], Ix](unC: F[R, Ix]) }
-
-  // aliases for pattern matching / constructing
-  class PMC[Ix] {
-    def IX[Xi] = I[Xi].Rec[I0, Ix] _
-    def KX[A] = K[A].Rec[I0, Ix] _
-    def UX = U[I0, Ix] _
-    def SumL[F[_[_], _]] = Sum[F, Nothing].L[I0, Ix] _
-    def SumR[G[_[_], _]] = Sum[Nothing, G].R[I0, Ix] _
-    def ProductX[F[_[_], _], G[_[_], _]] = Product[F, G].Rec[I0, Ix] _
-    def TagX[F[_[_], _], Ix0] = Tag[F, Ix0].Rec[I0, Ix] _
-    def DX[F[_], G[_[_], _]] = D[F, G].Rec[I0, Ix] _
-    def CX[Con, F[_[_], _]] = C[Con, F].Rec[I0, Ix] _
+    val proof: A === F[R, Ix]
   }
 
-  def IX[Xi, Ix] = I[Xi].Rec[I0, Ix] _
-  def KX[A, Ix] = K[A].Rec[I0, Ix] _
-  def UX[Ix] = U[I0, Ix] _
-  class SumL[F[_[_], _], Ix] {
-    val sum = Sum[F, Nothing]()
-    val apply = Sum[F, Nothing].L[I0, Ix] _
-    def unapply(s: sum.L[I0, Ix]): Option[F[I0, Ix]] = Some(s.unL)
+  trait UnapplyFH[A] {
+    type F[_]
+    type G[_[_], _]
+    type R[_]
+    type Ix
+
+    val proof: A === F[G[R, Ix]]
   }
-  def SumR[G[_[_], _], Ix] = Sum[Nothing, G].R[I0, Ix] _
-  def ProductX[F[_[_], _], G[_[_], _], Ix] = Product[F, G].Rec[I0, Ix] _
-  def TagX[F[_[_], _], Ix0, Ix] = Tag[F, Ix0].Rec[I0, Ix] _
-  def DX[F[_], G[_[_], _], Ix] = D[F, G].Rec[I0, Ix] _
-  def CX[Con, F[_[_], _], Ix] = C[Con, F].Rec[I0, Ix] _
+
+  class UnapplyFList[G0[_[_], _], R0[_], Ix0]
+      extends UnapplyFH[List[G0[R0, Ix0]]] {
+    type F[X] = List[X]
+    type G[X[_], Y] = G0[X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, List[G0[R0, Ix0]], F[G[R, Ix]]]
+  }
+  implicit def UnapplyFList[G0[_[_], _], R0[_], Ix] =
+    new UnapplyFList[G0, R0, Ix]
+
+  trait UnapplyH2[A, B] {
+    type F[_[_], _]
+    type G[_[_], _]
+    type R[_]
+    type Ix
+
+    val proofA: A === F[R, Ix]
+    val proofB: B === G[R, Ix]
+  }
+
+  // implicit def UnapplyH2[A, B](implicit UA: UnapplyH[A], UB: UnapplyH[B]) =
+  //   new UnapplyH2[A, B]
+
+  trait UnapplyR[A] {
+    type R[_]
+    type Ix
+
+    val proof: A === R[Ix]
+  }
+
+  implicit def UnapplyRI0[A] = new UnapplyR[I0[A]] {
+    type R[X] = I0[X]
+    type Ix = A
+
+    val proof = force[⊥, ⊤, I0[A], R[Ix]]
+  }
+
+  class UnapplyHI[Xi, R0[_], Ix0] extends UnapplyH[I[Xi, R0, Ix0]] {
+    type F[X[_], Y] = I[Xi, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, I[Xi, R0, Ix0], F[R, Ix]]
+  }
+  implicit def UnapplyHI[Xi, R0[_], Ix0] = new UnapplyHI[Xi, R0, Ix0]
+
+  class UnapplyHK[A, R0[_], Ix0] extends UnapplyH[K[A, R0, Ix0]] {
+    type F[X[_], Y] = K[A, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, K[A, R0, Ix0], F[R, Ix]]
+  }
+  implicit def UnapplyHK[A, R0[_], Ix0] = new UnapplyHK[A, R0, Ix0]
+
+  class UnapplyHU[R0[_], Ix0] extends UnapplyH[U[R0, Ix0]] {
+    type F[X[_], Y] = U[X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, U[R0, Ix0], F[R, Ix]]
+  }
+  implicit def UnapplyHU[R0[_], Ix0] = new UnapplyHU[R0, Ix0]
+
+  class UnapplyHL[F0[_[_], _], R0[_], Ix0]
+      extends UnapplyH[Lef[F0, R0, Ix0]] {
+    type F[X[_], Y] = Lef[F0, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, Lef[F0, R0, Ix0], F[R, Ix]]
+  }
+  implicit def UnapplyHL[F0[_[_], _], R0[_], Ix0] =
+    new UnapplyHL[F0, R0, Ix0]
+
+  class UnapplyHR[G0[_[_], _], R0[_], Ix0]
+      extends UnapplyH[Righ[G0, R0, Ix0]] {
+    type F[X[_], Y] = Righ[G0, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proof = force[⊥, ⊤, Righ[G0, R0, Ix0], F[R, Ix]]
+  }
+  implicit def UnapplyHR[G0[_[_], _], R0[_], Ix0] =
+    new UnapplyHR[G0, R0, Ix0]
+
+  class UnapplyHProduct[F0[_[_], _], G0[_[_], _], R0[_], Ix0]
+    extends UnapplyH[Product[F0, G0, R0, Ix0]] {
+      type F[X[_], Y] = Product[F0, G0, X, Y]
+      type R[X] = R0[X]
+      type Ix = Ix0
+
+    val proof = force[⊥, ⊤, Product[F0, G0, R0, Ix0], F[R, Ix]]
+    }
+  implicit def UnapplyHProduct[F0[_[_], _], G0[_[_], _], R0[_], Ix0] =
+    new UnapplyHProduct[F0, G0, R0, Ix0]
+
+  class UnapplyHTag[F0[_[_], _], Ix0, R0[_], Ix1]
+      extends UnapplyH[Tag[F0, Ix0, R0, Ix1]] {
+    type F[X[_], Y] = Tag[F0, Ix0, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix1
+
+    val proof = force[⊥, ⊤, Tag[F0, Ix0, R0, Ix1], F[R, Ix]]
+  }
+  implicit def UnapplyHTag[F0[_[_], _], Ix0, R0[_], Ix1] =
+    new UnapplyHTag[F0, Ix0, R0, Ix1]
+
+  class UnapplyHD[G[_], F0[_[_], _], R0[_], Ix1]
+      extends UnapplyH[D[G, F0, R0, Ix1]] {
+    type F[X[_], Y] = D[G, F0, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix1
+
+    val proof = force[⊥, ⊤, D[G, F0, R0, Ix1], F[R, Ix]]
+  }
+  implicit def UnapplyHD[G[_], F0[_[_], _], R0[_], Ix1] =
+    new UnapplyHD[G, F0, R0, Ix1]
+
+  class UnapplyHC[Con, F0[_[_], _], R0[_], Ix1]
+      extends UnapplyH[C[Con, F0, R0, Ix1]] {
+    type F[X[_], Y] = C[Con, F0, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix1
+
+    val proof = force[⊥, ⊤, C[Con, F0, R0, Ix1], F[R, Ix]]
+  }
+  implicit def UnapplyHC[Con, F0[_[_], _], R0[_], Ix1] =
+    new UnapplyHC[Con, F0, R0, Ix1]
+
+  def IF[R, Ix](unI: R)(implicit UR: UnapplyR[R]) =
+    I[UR.Ix, UR.R, Ix](UR.proof(unI))
+  def KF[A, R](unK: A)(implicit UR: UnapplyR[R]) = K[A, UR.R, UR.Ix](unK)
+  def UF[R]()(implicit UR: UnapplyR[R]) = U[UR.R, UR.Ix]()
+  def LF[A](unL: A)(implicit UA: UnapplyH[A]) =
+    Lef[UA.F, UA.R, UA.Ix](UA.proof(unL))
+  def RF[A](unR: A)(implicit UA: UnapplyH[A]) =
+    Righ[UA.F, UA.R, UA.Ix](UA.proof(unR))
+  // class ProductF[A, B](implicit val UA: UnapplyH[A], val UB: UnapplyH[B]) {
+  //   def apply(fst: A, snd: B)(implicit LA: A === UA.F[UA.R, UA.Ix], LB: B === UB.F[UB.R, UB.Ix]) =
+  //     Product[UA.F, UB.F, UA.R, UA.Ix]
+  // }
+  def TagF[A, Ix](unTag: A, ix: Ix)(implicit UA: UnapplyH[A]) =
+    Tag[UA.F, UA.Ix, UA.R, Ix](UA.proof(unTag))
+  def DF[F](unD: F)(implicit UF: UnapplyFH[F]) =
+    D[UF.F, UF.G, UF.R, UF.Ix](UF.proof(unD))
+  def CF[Con, A](con: Con, unC: A)(implicit UA: UnapplyH[A]) =
+    C[Con, UA.F, UA.R, UA.Ix](UA.proof(unC))
 
   case class I0[A](unI0: A)
   case class K0[A]() { case class Rec[B](unK0: A) }
@@ -149,7 +275,7 @@ sealed trait Base extends HConstructor {
   }
 
   trait EqS[Phi[_]] {
-    def eqS[Ix, Ix0](a: Phi[Ix], b: Phi[Ix0]): Ix =:= Ix0
+    def eqS[Ix, Ix0](a: Phi[Ix], b: Phi[Ix0]): Ix === Ix0
   }
 }
 
@@ -172,13 +298,12 @@ sealed trait HFunctor extends HConstructor with Base {
   //       A.ap(f(PEl.proof, x.unI))(A.point((r: R0[Xi]) => I[Xi].Rec(r)))
   //   }
 
-  implicit def KHFunctor[Phi[_], X]() = new HFunctor[Phi, K[X]#Rec] {
-    val KX = K[X]()
+  implicit def KHFunctor[Phi[_], X]() = new HFunctor[Phi, KT[X]#Rec] {
     def hmapA[R[_], R0[_], Ix, A[_]]
-      (p: Phi[Ix], x: K[X]#Rec[R, Ix])
+      (p: Phi[Ix], x: K[X, R, Ix])
       (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
       (implicit A: Applicative[A]) =
-      A.point(KX.Rec[R0, Ix](x.unK))
+      A.point(K(x.unK))
   }
   
 
@@ -187,7 +312,7 @@ sealed trait HFunctor extends HConstructor with Base {
       (p: Phi[Ix], x: U[R, Ix])
       (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
       (implicit A: Applicative[A]) =
-      A.point(U[R0, Ix]())
+      A.point(U())
   }
 
   // implicit def SumHFunctor[Phi[_], F[_[_], _], G[_[_], _]]
@@ -204,12 +329,12 @@ sealed trait HFunctor extends HConstructor with Base {
 
   implicit def ProductHFunctor[Phi[_], F[_[_], _], G[_[_], _]]
     (implicit Lh: HFunctor[Phi, F], Rh: HFunctor[Phi, G]) =
-    new HFunctor[Phi, Product[F,G]#Rec] {
+    new HFunctor[Phi, ProductT[F,G]#Rec] {
       def hmapA[R[_], R0[_], Ix, A[_]]
-        (p: Phi[Ix], x: Product[F,G]#Rec[R, Ix])
+        (p: Phi[Ix], x: Product[F, G, R, Ix])
         (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
         (implicit Aa: Applicative[A]) =
-        (Lh.hmapA(p, x.fst)(f) |@| Rh.hmapA(p, x.snd)(f))(Product[F,G].Rec.apply _)
+        (Lh.hmapA(p, x.fst)(f) |@| Rh.hmapA(p, x.snd)(f))(Product.apply _)
     }
   
   // implicit def TagHFunctor[Phi[_], F[_[_], _], Ix0]
@@ -223,23 +348,21 @@ sealed trait HFunctor extends HConstructor with Base {
 
   implicit def DHFunctor[Phi[_], F[_], G[_[_], _]]
     (implicit Tf: Traverse[F], Hg: HFunctor[Phi, G]) =
-    new HFunctor[Phi, D[F, G]#Rec] {
-      val DFG = D[F, G]()
+    new HFunctor[Phi, DT[F, G]#Rec] {
       def hmapA[R[_], R0[_], Ix, A[_]]
-        (p: Phi[Ix], x: D[F, G]#Rec[R, Ix])
+        (p: Phi[Ix], x: D[F, G, R, Ix])
         (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
         (implicit Aa: Applicative[A]) =
-        Aa.ap(Tf.traverse(x.unD)(y => Hg.hmapA(p, y)(f)))(Aa.point(DFG.Rec[R0, Ix](_)))
+        Aa.ap(Tf.traverse(x.unD)(y => Hg.hmapA(p, y)(f)))(Aa.point(D(_)))
     }
 
   implicit def ConstructorHFunctor[Phi[_], Cp <: Constructor, F[_[_], _]]
-    (implicit Hf: HFunctor[Phi, F]) = new HFunctor[Phi, C[Cp, F]#Rec] {
-    val CCF = C[Cp, F]()
+    (implicit Hf: HFunctor[Phi, F]) = new HFunctor[Phi, CT[Cp, F]#Rec] {
     def hmapA[R[_], R0[_], Ix, A[_]]
-      (p: Phi[Ix], x: C[Cp, F]#Rec[R, Ix])
+      (p: Phi[Ix], x: C[Cp, F, R, Ix])
       (f: ((Phi[Ix], R[Ix]) => A[R0[Ix]]) forSome { type Ix })
       (implicit A: Applicative[A]) =
-      A.ap(Hf.hmapA(p, x.unC)(f))(A.point(CCF.Rec[R0, Ix](_)))
+      A.ap(Hf.hmapA(p, x.unC)(f))(A.point(C(_)))
   }
 
   def hmap[Phi[_], R[_], R0[_], Ix, F[_[_], _]]

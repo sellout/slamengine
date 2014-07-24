@@ -2,7 +2,7 @@ package slamdata.engine.analysis
 
 import mutualrec._
 
-import scalaz._
+import scalaz.{Tag => ZTag, _}
 import Scalaz._
 
 // Small use case for mutualrec, just to make sure things compile
@@ -40,7 +40,7 @@ object AST {
   case class SeqC()    extends Constructor { val name = "Seq" }
   case class NoneC()   extends Constructor { val name = "None" }
 
-  class StupidScalaHack[A] extends PfResolver[Ast[A]#Dummy] {
+  class PfAst[A] extends PfResolver[Ast[A]#Dummy] {
     type Pf[R[_], Ix] =
       SumT[
         TagT[
@@ -57,7 +57,7 @@ object AST {
           Decl[A]]#Rec
       ]#Rec[R, Ix]
   }
-  implicit def PfAst[A]() = new StupidScalaHack[A]
+  implicit def PfAst[A]() = new PfAst[A]
 
   implicit def ExprEl[A]() = new El[Ast[A]#Dummy, Expr[A]] {
     val AA = Ast[A]
@@ -74,32 +74,32 @@ object AST {
 
   implicit def DummyFam[A]() = new Fam[Ast[A]#Dummy] {
     def from[Ix](phi: DummyAst[A, Ix], index: Ix) = {
-      val p = new PMC[Ix]
-
-      // phi match {
-      // case _: Ast[_]#DummyExpr =>
-      index match {
-        case Const(i)  => LQ[TagT[SumT[CT[ConstC, KT[Int]#Rec]#Rec, Nothing]#Rec, Expr[A]]#Rec, I0, Ix](TagQ[SumT[CT[ConstC, KT[Int]#Rec]#Rec, Nothing]#Rec, Expr[A], I0, Ix] (LQ[CT[ConstC, KT[Int]#Rec]#Rec, I0, Ix](                     CQ[ConstC, KT[Int]#Rec, I0, Ix](KQ[Int, I0, Ix](i)))))
-        case Add(l, r) => p.SumL(p.TagX(p.SumR(p.SumL(              p.CX(p.ProductX(p.IX(I0(l)), p.IX(I0(r))))))))
-        case Mul(l, r) => p.SumL(p.TagX(p.SumR(p.SumR(p.SumL(       p.CX(p.ProductX(p.IX(I0(l)), p.IX(I0(r)))))))))
-        case Var(v)    => p.SumL(p.TagX(p.SumR(p.SumR(p.SumR(p.SumL(p.CX(p.KX(v))))))))
-        case Let(d, e) => p.SumL(p.TagX(p.SumR(p.SumR(p.SumR(p.SumR(p.CX(p.ProductX(p.IX(I0(d)), p.IX(I0(e))))))))))
-        // }
-        // case _: Ast[_]#DummyDecl => index {
-        case Assign(v, e) => p.SumR(p.SumL(p.TagX(p.SumL(       p.CX(p.ProductX(p.IX(I0(v)), p.IX(I0(e))))))))
-        case Seq(ds)      => p.SumR(p.SumL(p.TagX(p.SumR(p.SumL(p.CX(p.DX(ds.map((s: Decl[Any]) => p.IX(I0(s))))))))))
-        case None         => p.SumR(p.SumL(p.TagX(p.SumR(p.SumR(p.CX(p.UX()))))))
+      phi match {
+      case _: Ast[_]#DummyExpr =>
+          index match {
+            case Const(i) => TagF(LF(CF(ConstC(), KF(i))), index): Tag[LefT[CT[ConstC, KT[Int]#Rec]#Rec]#Rec, Expr[A], I0, Ix]
+              ???
+        // case Const(i)  => LF(TagF(LF(         CF(ConstC(), KF[Int, I0[Ix]](i))),                index))
+        // case Add(l, r) => LF(TagF(RF(LF(      CF(AddC(),   ProductF(IF(I0(l)), IF(I0(r)))))),   index))
+        // case Mul(l, r) => LF(TagF(RF(RF(LF(   CF(MulC(),   ProductF(IF(I0(l)), IF(I0(r))))))),  index))
+        // case Var(v)    => LF(TagF(RF(RF(RF(LF(CF(VarC(),   KF(v)))))),                          index))
+        // case Let(d, e) => LF(TagF(RF(RF(RF(RF(CF(LetC(),   ProductF(IF(I0(d)), IF(I0(e)))))))), index))
+        // // // }
+        // // // case _: Ast[_]#DummyDecl => index {
+        // case Assign(v, e) => RF(TagF(LF(   CF(AssignC(), ProductF(IF(I0(v)), IF(I0(e))))),           index))
+        // case Seq(ds)      => RF(TagF(RF(LF(CF(SeqC(),    DF[List[I[A, I0, Ix]]](ds.map((s: Decl[A]) => IF(I0(s))))))), index))
+        // case None         => RF(TagF(RF(RF(CF(NoneC(),   UF()))),                                    index))
           // }
           // case _: Ast[_]#DummyVar => index match {
           //   case Var(v)    => p.SumR(p.SumR(p.TagX(p.SumL(p.CX(p.KX(v))))))
-          // }
+          }
       }
     }
 
     def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfResolver[Ast[A]#Dummy]#Pf[I0, Ix]):
         Ix =
       pf match {
-        case LQ(TagQ(LQ(CQ(i)))) => Const(i)
+        case Lef(Tag(Lef(C(K(i))))) => Const(i)
       }
   }
 }
