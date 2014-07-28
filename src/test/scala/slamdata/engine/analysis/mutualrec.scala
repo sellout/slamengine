@@ -4,6 +4,7 @@ import mutualrec._
 
 import scalaz.{Tag => ZTag, _}
 import Scalaz._
+import Leibniz._
 
 // Small use case for mutualrec, just to make sure things compile
 
@@ -101,5 +102,18 @@ object AST {
       pf match {
         case Lef(Tag(Lef(C(K(i))))) => Const(i)
       }
+  }
+
+  implicit def DummyEqS[A]() = new EqS[Ast[A]#Dummy] {
+    def eqS[Ix, Ix0](a: DummyAst[A, Ix], b: DummyAst[A, Ix0]) = (a, b) match {
+      case (_: Ast[_]#DummyExpr, _: Ast[_]#DummyExpr) =>
+        Some(force[⊥, ⊤, Ix, Ix0])
+      case (_: Ast[_]#DummyDecl, _: Ast[_]#DummyDecl) =>
+        Some(force[⊥, ⊤, Ix, Ix0])
+      case (_: Ast[_]#DummyVar,  _: Ast[_]#DummyVar)  =>
+        Some(force[⊥, ⊤, Ix, Ix0])
+      case _                                          =>
+        none
+    }
   }
 }

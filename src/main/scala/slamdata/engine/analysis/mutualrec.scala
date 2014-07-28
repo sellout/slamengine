@@ -275,7 +275,7 @@ sealed trait Base extends HConstructor {
   }
 
   trait EqS[Phi[_]] {
-    def eqS[Ix, Ix0](a: Phi[Ix], b: Phi[Ix0]): Ix === Ix0
+    def eqS[Ix, Ix0](a: Phi[Ix], b: Phi[Ix0]): Option[Ix === Ix0]
   }
 }
 
