@@ -45,21 +45,21 @@ object AST {
     // FIXME: The `Any`s in here should be `A`s.
     // FIXME: The TagT Ix should be more specific
     type Pf[R[_], Ix] =
-      // Sum[
-        Tag[
+      Sum[
+        TagT[
           SumT[CT[ConstC, KT[Int]#Rec]#Rec,
             SumT[CT[AddC, ProductT[IT[Expr[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
               SumT[CT[MulC, ProductT[IT[Expr[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
                 SumT[CT[VarC, KT[Any]#Rec]#Rec,
                   CT[LetC, ProductT[IT[Decl[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec,
-          Ix, // Expr[A]
-        // ]#Rec,
-        // TagT[
-        //   SumT[CT[AssignC, ProductT[IT[Var[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
-        //     SumT[CT[SeqC, DT[List, IT[Decl[A]]#Rec]#Rec]#Rec,
-        //       CT[NoneC, U]#Rec]#Rec]#Rec,
-        //   Ix // Decl[A]
-        // ]#Rec,
+          Ix // Expr[A]
+        ]#Rec,
+        TagT[
+          SumT[CT[AssignC, ProductT[IT[Var[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
+            SumT[CT[SeqC, DT[List, IT[Decl[A]]#Rec]#Rec]#Rec,
+              CT[NoneC, U]#Rec]#Rec]#Rec,
+          Ix // Decl[A]
+        ]#Rec,
       R, Ix]
   }
   implicit def PfAst[A]() = new PfAst[A]
@@ -82,11 +82,11 @@ object AST {
       // phi match {
       // case _: Ast[_]#DummyExpr =>
           index match {
-            case Const(i)  => TagT(LefT(                   CT(ConstC(), KT[Int, I0[Ix]](i))),                                                      index)
-            case Add(l, r) => TagT(RighT(LefT(             CT(AddC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r)))))),   index)
-            case Mul(l, r) => TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index)
-            case Var(v)    => TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index)
-            case Let(d, e) => TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index)
+            case Const(i)  => LefT(TagT(LefT(                   CT(ConstC(), KT[Int, I0[Ix]](i))),                                                      index))
+            case Add(l, r) => LefT(TagT(RighT(LefT(             CT(AddC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r)))))),   index))
+            case Mul(l, r) => LefT(TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index))
+            case Var(v)    => LefT(TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index))
+            case Let(d, e) => LefT(TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index))
         // // // }
         // // // case _: Ast[_]#DummyDecl => index {
         // case Assign(v, e) => RF(TagF(LF(   CF(AssignC(), ProductF(IF(I0(v)), IF(I0(e))))),           index))

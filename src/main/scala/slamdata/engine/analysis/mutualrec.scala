@@ -211,7 +211,7 @@ sealed trait Base extends HConstructor {
 
   class UnapplyHTag[F0[_[_], _], Ix0, R0[_], Ix1]
       extends UnapplyH[Tag[F0, Ix0, R0, Ix1]] {
-    type F[X[_], Y] = Tag[F0, Y, X, Ix1]
+    type F[X[_], Y] = Tag[F0, Ix0, X, Y]
     type R[X] = R0[X]
     type Ix = Ix0
 
