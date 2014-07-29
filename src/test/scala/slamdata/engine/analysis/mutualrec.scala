@@ -82,11 +82,11 @@ object AST {
       // phi match {
       // case _: Ast[_]#DummyExpr =>
           index match {
-            case Const(i)  => TagF(LF(         CF(ConstC(), KF[Int, I0[Ix]](i))),                                                      index)
-            case Add(l, r) => TagF(RF(LF(      CF(AddC(),   ProductF(IF[I0[Expr[Any]], Ix](I0(l)), IF[I0[Expr[Any]], Ix](I0(r)))))),   index)
-            case Mul(l, r) => TagF(RF(RF(LF(   CF(MulC(),   ProductF(IF[I0[Expr[Any]], Ix](I0(l)), IF[I0[Expr[Any]], Ix](I0(r))))))),  index)
-            case Var(v)    => TagF(RF(RF(RF(LF(CF(VarC(),   KF[Any, I0[Ix]](v)))))),                                                   index)
-            case Let(d, e) => TagF(RF(RF(RF(RF(CF(LetC(),   ProductF(IF[I0[Decl[Any]], Ix](I0(d)), IF[I0[Expr[Any]], Ix](I0(e)))))))), index)
+            case Const(i)  => TagT(LefT(                   CT(ConstC(), KT[Int, I0[Ix]](i))),                                                      index)
+            case Add(l, r) => TagT(RighT(LefT(             CT(AddC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r)))))),   index)
+            case Mul(l, r) => TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index)
+            case Var(v)    => TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index)
+            case Let(d, e) => TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index)
         // // // }
         // // // case _: Ast[_]#DummyDecl => index {
         // case Assign(v, e) => RF(TagF(LF(   CF(AssignC(), ProductF(IF(I0(v)), IF(I0(e))))),           index))

@@ -242,21 +242,21 @@ sealed trait Base extends HConstructor {
   implicit def UnapplyHC[Con, F0[_[_], _], R0[_], Ix1] =
     new UnapplyHC[Con, F0, R0, Ix1]
 
-  def IF[R, Ix](unI: R)(implicit UR: UnapplyR[R]) =
+  def IT[R, Ix](unI: R)(implicit UR: UnapplyR[R]) =
     I[UR.Ix, UR.R, Ix](UR.proof(unI))
-  def KF[A, R](unK: A)(implicit UR: UnapplyR[R]) = K[A, UR.R, UR.Ix](unK)
-  def UF[R]()(implicit UR: UnapplyR[R]) = U[UR.R, UR.Ix]()
-  def LF[A](unL: A)(implicit UA: UnapplyH[A]) =
+  def KT[A, R](unK: A)(implicit UR: UnapplyR[R]) = K[A, UR.R, UR.Ix](unK)
+  def UT[R]()(implicit UR: UnapplyR[R]) = U[UR.R, UR.Ix]()
+  def LefT[A](unL: A)(implicit UA: UnapplyH[A]) =
     Lef[UA.F, UA.R, UA.Ix](UA.proof(unL))
-  def RF[A](unR: A)(implicit UA: UnapplyH[A]) =
+  def RighT[A](unR: A)(implicit UA: UnapplyH[A]) =
     Righ[UA.F, UA.R, UA.Ix](UA.proof(unR))
-  def ProductF[A, B](fst: A, snd: B)(implicit U2: UnapplyH2[A, B]) =
+  def ProductT[A, B](fst: A, snd: B)(implicit U2: UnapplyH2[A, B]) =
     Product[U2.F, U2.G, U2.R, U2.Ix](U2.proofF(fst), U2.proofG(snd))
-  def TagF[A, Ix](unTag: A, ix: Ix)(implicit UA: UnapplyH[A]) =
+  def TagT[A, Ix](unTag: A, ix: Ix)(implicit UA: UnapplyH[A]) =
     Tag[UA.F, UA.Ix, UA.R, Ix](UA.proof(unTag))
-  def DF[F](unD: F)(implicit UF: UnapplyFH[F]) =
+  def DT[F](unD: F)(implicit UF: UnapplyFH[F]) =
     D[UF.F, UF.G, UF.R, UF.Ix](UF.proof(unD))
-  def CF[Con, A](con: Con, unC: A)(implicit UA: UnapplyH[A]) =
+  def CT[Con, A](con: Con, unC: A)(implicit UA: UnapplyH[A]) =
     C[Con, UA.F, UA.R, UA.Ix](UA.proof(unC))
 
   case class I0[A](unI0: A)
