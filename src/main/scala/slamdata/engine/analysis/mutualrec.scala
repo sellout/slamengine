@@ -56,11 +56,11 @@ sealed trait Base extends HConstructor {
   case class I[Xi, R[_], Ix](unI: R[Xi])
   case class K[A, R[_], Ix](unK: A)
   case class U[R[_], Ix]()
-  sealed trait Sum[F[_[_], _], G[_[_], _], R[_], Ix]
+  sealed trait Sum[+F[_[_], _], +G[_[_], _], R[_], Ix]
   case class Lef[F[_[_], _], R[_], Ix](unL: F[R, Ix]) extends Sum[F, Nothing, R, Ix]
   case class Righ[G[_[_], _], R[_], Ix](unR: G[R, Ix]) extends Sum[Nothing, G, R, Ix]
   case class Product[F[_[_], _], G[_[_], _], R[_], Ix](fst: F[R, Ix], snd: G[R, Ix])
-  case class Tag[F[_[_], _], Ix0, R[_], Ix](unTag: F[R, Ix0])
+  case class Tag[+F[_[_], _], Ix0, R[_], Ix](unTag: F[R, Ix0])
   case class D[F[_], G[_[_], _], R[_], Ix](unD: F[G[R, Ix]])
   case class C[Con, F[_[_], _], R[_], Ix](unC: F[R, Ix])
 
@@ -119,12 +119,21 @@ sealed trait Base extends HConstructor {
     type R[_]
     type Ix
 
-    val proofA: A === F[R, Ix]
-    val proofB: B === G[R, Ix]
+    val proofF: A === F[R, Ix]
+    val proofG: B === G[R, Ix]
   }
 
-  // implicit def UnapplyH2[A, B](implicit UA: UnapplyH[A], UB: UnapplyH[B]) =
-  //   new UnapplyH2[A, B]
+  // TODO: implement for the remaining combinations
+  class UnapplyH2I[Xi0, Xi1, R0[_], Ix0] extends UnapplyH2[I[Xi0, R0, Ix0], I[Xi1, R0, Ix0]] {
+    type F[X[_], Y] = I[Xi0, X, Y]
+    type G[X[_], Y] = I[Xi1, X, Y]
+    type R[X] = R0[X]
+    type Ix = Ix0
+
+    val proofF = force[⊥, ⊤, I[Xi0, R0, Ix0], F[R, Ix]]
+    val proofG = force[⊥, ⊤, I[Xi1, R0, Ix0], G[R, Ix]]
+  }
+  implicit def UnapplyH2I[Xi0, Xi1, R0[_], Ix0] = new UnapplyH2I[Xi0, Xi1, R0, Ix0]
 
   trait UnapplyR[A] {
     type R[_]
@@ -202,9 +211,9 @@ sealed trait Base extends HConstructor {
 
   class UnapplyHTag[F0[_[_], _], Ix0, R0[_], Ix1]
       extends UnapplyH[Tag[F0, Ix0, R0, Ix1]] {
-    type F[X[_], Y] = Tag[F0, Ix0, X, Y]
+    type F[X[_], Y] = Tag[F0, Y, X, Ix1]
     type R[X] = R0[X]
-    type Ix = Ix1
+    type Ix = Ix0
 
     val proof = force[⊥, ⊤, Tag[F0, Ix0, R0, Ix1], F[R, Ix]]
   }
@@ -241,10 +250,8 @@ sealed trait Base extends HConstructor {
     Lef[UA.F, UA.R, UA.Ix](UA.proof(unL))
   def RF[A](unR: A)(implicit UA: UnapplyH[A]) =
     Righ[UA.F, UA.R, UA.Ix](UA.proof(unR))
-  // class ProductF[A, B](implicit val UA: UnapplyH[A], val UB: UnapplyH[B]) {
-  //   def apply(fst: A, snd: B)(implicit LA: A === UA.F[UA.R, UA.Ix], LB: B === UB.F[UB.R, UB.Ix]) =
-  //     Product[UA.F, UB.F, UA.R, UA.Ix]
-  // }
+  def ProductF[A, B](fst: A, snd: B)(implicit U2: UnapplyH2[A, B]) =
+    Product[U2.F, U2.G, U2.R, U2.Ix](U2.proofF(fst), U2.proofG(snd))
   def TagF[A, Ix](unTag: A, ix: Ix)(implicit UA: UnapplyH[A]) =
     Tag[UA.F, UA.Ix, UA.R, Ix](UA.proof(unTag))
   def DF[F](unD: F)(implicit UF: UnapplyFH[F]) =
@@ -452,19 +459,19 @@ sealed trait FoldK extends Base with HFunctor {
   type AlgebraF[Phi[_], G[_], R] = AlgebraF0[Phi, PfResolver[Phi]#Pf, G, R]
 
   def fold[Phi[_], Ix, R](p: Phi[Ix], x: Ix)(f: Algebra[Phi, R])
-    (implicit Fp: Fam[Phi], Hp: HFunctor [Phi, PfResolver[Phi]#Pf]):
+    (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, PfResolver[Phi]#Pf]):
       R =
     f(p, hmap(p, Fp.from(p, x))((p, x) => K0[R].Rec(fold(p, x.unI0)(f))))
 
   def foldM[Phi[_], Ix, R, M[_]](p: Phi[Any], x: R)(f: AlgebraF[Phi, M, R])
-    (implicit Fp: Fam[Phi], Hp: HFunctor [Phi, PfResolver[Phi]#Pf], Mm: Monad[M]):
+    (implicit Fp: Fam[Phi], Hp: HFunctor[Phi, PfResolver[Phi]#Pf], Mm: Monad[M]):
       M[R] =
     Mm.bind(Hp.hmapA(p, Fp.from(p, x))((p: Phi[_], x: I0[_]) => K0[R].Rec(foldM(p, x.unI0)(f)).liftM))(f(p, _))
 
 
 }
 
-sealed trait Show extends Base with HFunctor with FoldK {
+sealed trait HShow extends Base with HFunctor with FoldK {
 
   type ShowS = String => String
 
@@ -476,14 +483,14 @@ sealed trait Show extends Base with HFunctor with FoldK {
   }
 
   implicit def ElHShow[Phi[_], Xi](implicit Ep: El[Phi, Xi]) =
-    new HShow[Phi, I[Xi]#Rec] {
+    new HShow[Phi, IT[Xi]#Rec] {
       val hShowsPrecAlg =
-        (_: Phi[Xi], x: I[Xi]#Rec[K0[List[(Int, String) => String]]#Rec, Xi])
+        (_: Phi[Xi], x: I[Xi, K0[List[(Int, String) => String]]#Rec, Xi])
           => x.unI.unK0
     }
 
   implicit def KHShow[Phi[_], A](implicit Sa: scalaz.Show[A]) =
-    new HShow[Phi, K[A]#Rec] {
+    new HShow[Phi, KT[A]#Rec] {
       // FIXME: Should use something like `showsPrec(edence)` to handle infix
       val hShowsPrecAlg =
         (_: Phi[A], x: A) => List((n: Int) => (s: String) => Sa.show(x) ++ s)
@@ -498,45 +505,45 @@ sealed trait Show extends Base with HFunctor with FoldK {
   //   new HShow[Phi, Sum[F, G]#Rec] {
   //     val hShowsPrecAlg =
   //       (ix: Phi[Any],
-  //         x: Sum[F, G]#Rec[K0[List[Int => ShowS]]#Rec, Any]) =>
+  //         x: Sum[F, G, K0[List[Int => ShowS]]#Rec, Any]) =>
   //     x match {
-  //       case y: Sum[_, _]#L[_, _] => HSf.hShowsPrecAlg(ix, y.unL)
-  //       case y: Sum[_, _]#R[_, _] => HSg.hShowsPrecAlg(ix, y.unR)
+  //       case y: SumT[_, _]#L[_, _] => HSf.hShowsPrecAlg(ix, y.unL)
+  //       case y: SumT[_, _]#R[_, _] => HSg.hShowsPrecAlg(ix, y.unR)
   //     }
   //   }
 
   implicit def ProductHShow[Phi[_], F[_[_], _], G[_[_], _]]
     (implicit HSf: HShow[Phi, F], HSg: HShow[Phi, G]) =
-    new HShow[Phi, Sum[F, G]#Rec] {
+    new HShow[Phi, SumT[F, G]#Rec] {
       val hShowsPrecAlg =
         (ix: Phi[Any],
-          x: Product[F, G]#Rec[K0[List[Int => ShowS]]#Rec, Any]) =>
+          x: Product[F, G, K0[List[Int => ShowS]]#Rec, Any]) =>
       HSf.hShowsPrecAlg(ix, x.fst) ++ HSg.hShowsPrecAlg(ix, x.snd)
     }
 
   implicit def TagHShow[Phi[_], F[_[_], _], Ix](implicit HSf: HShow[Phi, F]) =
-    new HShow[Phi, Tag[F, Ix]#Rec] {
+    new HShow[Phi, TagT[F, Ix]#Rec] {
       val hShowsPrecAlg =
         (ix: Phi[Ix],
-          x: Tag[F, Ix]#Rec[K0[List[Int => ShowS]]#Rec, Ix]) =>
+          x: Tag[F, Ix, K0[List[Int => ShowS]]#Rec, Ix]) =>
       HSf.hShowsPrecAlg(ix, x.unTag)
     }
 
   implicit def DHShow[Phi[_], F[_], G[_[_], _], Ix]
     (implicit Sf: Show1[F], Tf: Traverse[F], HSg: HShow[Phi, G]) =
-    new HShow[Phi, D[F, G]#Rec] {
+    new HShow[Phi, DT[F, G]#Rec] {
       val hShowsPrecAlg =
         (ix: Phi[Ix],
-          x: D[F, G]#Rec[K0[List[Int => ShowS]]#Rec, Ix]) =>
+          x: D[F, G, K0[List[Int => ShowS]]#Rec, Ix]) =>
       List((n: Int) => Sf.show1(n)(x.unD.map(HSg.hShowsPrecAlg(ix, _))))
     }
 
   // implicit def CHShow[Phi[_], Con <: Constructor, F[_[_], _], Ix]
   //   (implicit HSf: HShow[Phi, F]) =
-  //   new HShow[Phi, C[Con, F]#Rec] {
+  //   new HShow[Phi, CT[Con, F]#Rec] {
   //     val hShowsPrecAlg =
   //       (ix: Phi[Ix],
-  //         x: C[Con, F]#Rec[K0[List[Int => ShowS]]#Rec, Ix]) => {
+  //         x: C[Con, F, K0[List[Int => ShowS]]#Rec, Ix]) => {
   //         val fields = HSf.hShowsPrecAlg(ix, x)
   //         List(x.fixity match {
   //           case Prefix =>

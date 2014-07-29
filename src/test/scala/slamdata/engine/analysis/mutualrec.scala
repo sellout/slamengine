@@ -27,7 +27,7 @@ object AST {
     sealed trait Dummy[+Index]
     case class DummyExpr() extends Dummy[Expr[Param]]
     case class DummyDecl() extends Dummy[Decl[Param]]
-    case class DummyVar() extends Dummy[Var[Param]]
+    case class DummyVar()  extends Dummy[Var[Param]]
   }
   type DummyAst[Param, Index] = Ast[Param]#Dummy[Index]
 
@@ -42,21 +42,25 @@ object AST {
   case class NoneC()   extends Constructor { val name = "None" }
 
   class PfAst[A] extends PfResolver[Ast[A]#Dummy] {
+    // FIXME: The `Any`s in here should be `A`s.
+    // FIXME: The TagT Ix should be more specific
     type Pf[R[_], Ix] =
-      SumT[
-        TagT[
+      // Sum[
+        Tag[
           SumT[CT[ConstC, KT[Int]#Rec]#Rec,
-            SumT[CT[AddC, ProductT[IT[Expr[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
-              SumT[CT[MulC, ProductT[IT[Expr[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
-                SumT[CT[VarC, KT[A]#Rec]#Rec,
-                  CT[LetC, ProductT[IT[Decl[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec,
-          Expr[A]]#Rec,
-        TagT[
-          SumT[CT[AssignC, ProductT[IT[Var[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
-            SumT[CT[SeqC, DT[List, IT[Decl[A]]#Rec]#Rec]#Rec,
-              CT[NoneC, U]#Rec]#Rec]#Rec,
-          Decl[A]]#Rec
-      ]#Rec[R, Ix]
+            SumT[CT[AddC, ProductT[IT[Expr[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
+              SumT[CT[MulC, ProductT[IT[Expr[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
+                SumT[CT[VarC, KT[Any]#Rec]#Rec,
+                  CT[LetC, ProductT[IT[Decl[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec,
+          Ix, // Expr[A]
+        // ]#Rec,
+        // TagT[
+        //   SumT[CT[AssignC, ProductT[IT[Var[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
+        //     SumT[CT[SeqC, DT[List, IT[Decl[A]]#Rec]#Rec]#Rec,
+        //       CT[NoneC, U]#Rec]#Rec]#Rec,
+        //   Ix // Decl[A]
+        // ]#Rec,
+      R, Ix]
   }
   implicit def PfAst[A]() = new PfAst[A]
 
@@ -74,17 +78,15 @@ object AST {
   }
 
   implicit def DummyFam[A]() = new Fam[Ast[A]#Dummy] {
-    def from[Ix](phi: DummyAst[A, Ix], index: Ix) = {
-      phi match {
-      case _: Ast[_]#DummyExpr =>
+    def from[Ix](phi: DummyAst[A, Ix], index: Ix): PfAst[A]#Pf[I0, Ix] = {
+      // phi match {
+      // case _: Ast[_]#DummyExpr =>
           index match {
-            case Const(i) => TagF(LF(CF(ConstC(), KF(i))), index): Tag[LefT[CT[ConstC, KT[Int]#Rec]#Rec]#Rec, Expr[A], I0, Ix]
-              ???
-        // case Const(i)  => LF(TagF(LF(         CF(ConstC(), KF[Int, I0[Ix]](i))),                index))
-        // case Add(l, r) => LF(TagF(RF(LF(      CF(AddC(),   ProductF(IF(I0(l)), IF(I0(r)))))),   index))
-        // case Mul(l, r) => LF(TagF(RF(RF(LF(   CF(MulC(),   ProductF(IF(I0(l)), IF(I0(r))))))),  index))
-        // case Var(v)    => LF(TagF(RF(RF(RF(LF(CF(VarC(),   KF(v)))))),                          index))
-        // case Let(d, e) => LF(TagF(RF(RF(RF(RF(CF(LetC(),   ProductF(IF(I0(d)), IF(I0(e)))))))), index))
+            case Const(i)  => TagF(LF(         CF(ConstC(), KF[Int, I0[Ix]](i))),                                                      index)
+            case Add(l, r) => TagF(RF(LF(      CF(AddC(),   ProductF(IF[I0[Expr[Any]], Ix](I0(l)), IF[I0[Expr[Any]], Ix](I0(r)))))),   index)
+            case Mul(l, r) => TagF(RF(RF(LF(   CF(MulC(),   ProductF(IF[I0[Expr[Any]], Ix](I0(l)), IF[I0[Expr[Any]], Ix](I0(r))))))),  index)
+            case Var(v)    => TagF(RF(RF(RF(LF(CF(VarC(),   KF[Any, I0[Ix]](v)))))),                                                   index)
+            case Let(d, e) => TagF(RF(RF(RF(RF(CF(LetC(),   ProductF(IF[I0[Decl[Any]], Ix](I0(d)), IF[I0[Expr[Any]], Ix](I0(e)))))))), index)
         // // // }
         // // // case _: Ast[_]#DummyDecl => index {
         // case Assign(v, e) => RF(TagF(LF(   CF(AssignC(), ProductF(IF(I0(v)), IF(I0(e))))),           index))
@@ -94,7 +96,7 @@ object AST {
           // case _: Ast[_]#DummyVar => index match {
           //   case Var(v)    => p.SumR(p.SumR(p.TagX(p.SumL(p.CX(p.KX(v))))))
           }
-      }
+      // }
     }
 
     def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfResolver[Ast[A]#Dummy]#Pf[I0, Ix]):
