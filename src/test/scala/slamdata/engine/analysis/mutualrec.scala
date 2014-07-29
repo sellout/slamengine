@@ -104,10 +104,12 @@ object AST {
     }
 
     def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfAst[A]#Pf[I0, Ix]):
-        Ix =
-      pf match {
-        case Lef(Tag(Lef(C(K(i))))) => Const(i)
-      }
+        Ix = 
+      // pf match {
+      //   case Lef(Tag(Lef(C(K(i)))))               => ??? // Const(i)
+      //   case Lef(Tag(Righ(Lef(C(Product(I(l), I(r))))))) => ??? //Add(l, r)
+      // }
+      ???
   }
 
   implicit def DummyEqS[A]() = new EqS[Ast[A]#Dummy] {
