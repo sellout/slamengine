@@ -101,17 +101,31 @@ sealed trait Base extends HConstructor {
     val proof: A === F[G[R, Ix]]
   }
 
-  class UnapplyFList[G0[_[_], _], R0[_], Ix0]
-      extends UnapplyFH[List[G0[R0, Ix0]]] {
+  // FIXME: This is too specific. Need something like UnapplyFList, as below.
+  class UnapplyFListI[Ix1, R0[_], Ix0]
+      extends UnapplyFH[List[I[Ix1, R0, Ix0]]] {
     type F[X] = List[X]
-    type G[X[_], Y] = G0[X, Y]
+    type G[X[_], Y] = I[Ix1, X, Y]
     type R[X] = R0[X]
     type Ix = Ix0
 
-    val proof = force[⊥, ⊤, List[G0[R0, Ix0]], F[G[R, Ix]]]
+    val proof = force[⊥, ⊤, List[I[Ix1, R0, Ix0]], F[G[R, Ix]]]
   }
-  implicit def UnapplyFList[G0[_[_], _], R0[_], Ix] =
-    new UnapplyFList[G0, R0, Ix]
+  implicit def UnapplyFListI[Ix1, R0[_], Ix] =
+    new UnapplyFListI[Ix1, R0, Ix]
+
+  // class UnapplyFList[G0[_[_], _], R0[_], Ix0]
+  //   (implicit val UH: UnapplyH[G0[R0, Ix0]])
+  //     extends UnapplyFH[List[G0[R0, Ix0]]] {
+  //   type F[X] = List[X]
+  //   type G[X[_], Y] = UH.G[X, Y]
+  //   type R[X] = UH.R[X]
+  //   type Ix = UH.Ix
+
+  //   val proof = force[⊥, ⊤, List[G0[R0, Ix0]], F[G[R, Ix]]]
+  // }
+  // implicit def UnapplyFList[G0[_[_], _], R0[_], Ix] =
+  //   new UnapplyFList[G0, R0, Ix]
 
   trait UnapplyH2[A, B] {
     type F[_[_], _]

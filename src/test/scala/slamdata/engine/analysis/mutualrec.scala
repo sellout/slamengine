@@ -55,8 +55,8 @@ object AST {
           Ix // Expr[A]
         ]#Rec,
         TagT[
-          SumT[CT[AssignC, ProductT[IT[Var[A]]#Rec, IT[Expr[A]]#Rec]#Rec]#Rec,
-            SumT[CT[SeqC, DT[List, IT[Decl[A]]#Rec]#Rec]#Rec,
+          SumT[CT[AssignC, ProductT[IT[Var[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
+            SumT[CT[SeqC, DT[List, IT[Decl[Any]]#Rec]#Rec]#Rec,
               CT[NoneC, U]#Rec]#Rec]#Rec,
           Ix // Decl[A]
         ]#Rec,
@@ -87,11 +87,11 @@ object AST {
             case Mul(l, r) => LefT(TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index))
             case Var(v)    => LefT(TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index))
             case Let(d, e) => LefT(TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index))
-        // // // }
-        // // // case _: Ast[_]#DummyDecl => index {
-        // case Assign(v, e) => RF(TagF(LF(   CF(AssignC(), ProductF(IF(I0(v)), IF(I0(e))))),           index))
-        // case Seq(ds)      => RF(TagF(RF(LF(CF(SeqC(),    DF[List[I[A, I0, Ix]]](ds.map((s: Decl[A]) => IF(I0(s))))))), index))
-        // case None         => RF(TagF(RF(RF(CF(NoneC(),   UF()))),                                    index))
+        // }
+        // case _: Ast[_]#DummyDecl => index {
+        case Assign(v, e) => RighT(TagT(LefT(       CT(AssignC(), ProductT(IT[I0[Var[Any]], Ix](I0(v)), IT[I0[Expr[Any]], Ix](I0(e))))), index))
+        case Seq(ds)      => RighT(TagT(RighT(LefT( CT(SeqC(),    DT(ds.map(s => IT[I0[Decl[Any]], Ix](I0(s))))))),                      index))
+        case None         => RighT(TagT(RighT(RighT(CT(NoneC(),   UT[I0[Ix]]()))),                                                       index))
           // }
           // case _: Ast[_]#DummyVar => index match {
           //   case Var(v)    => p.SumR(p.SumR(p.TagX(p.SumL(p.CX(p.KX(v))))))
@@ -99,7 +99,7 @@ object AST {
       // }
     }
 
-    def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfResolver[Ast[A]#Dummy]#Pf[I0, Ix]):
+    def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfAst[A]#Pf[I0, Ix]):
         Ix =
       pf match {
         case Lef(Tag(Lef(C(K(i))))) => Const(i)
