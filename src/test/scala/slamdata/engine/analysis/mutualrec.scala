@@ -54,12 +54,17 @@ object AST {
                   CT[LetC, ProductT[IT[Decl[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec]#Rec,
           Ix // Expr[A]
         ]#Rec,
-        TagT[
-          SumT[CT[AssignC, ProductT[IT[Var[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
-            SumT[CT[SeqC, DT[List, IT[Decl[Any]]#Rec]#Rec]#Rec,
-              CT[NoneC, U]#Rec]#Rec]#Rec,
-          Ix // Decl[A]
-        ]#Rec,
+        SumT[
+          TagT[
+            SumT[CT[AssignC, ProductT[IT[Var[Any]]#Rec, IT[Expr[Any]]#Rec]#Rec]#Rec,
+              SumT[CT[SeqC, DT[List, IT[Decl[Any]]#Rec]#Rec]#Rec,
+                CT[NoneC, U]#Rec]#Rec]#Rec,
+            Ix // Decl[A]
+          ]#Rec,
+          TagT[
+            CT[VarC, KT[Any]#Rec]#Rec,
+            Ix // Var[A]
+          ]#Rec]#Rec,
       R, Ix]
   }
   implicit def PfAst[A]() = new PfAst[A]
@@ -79,24 +84,23 @@ object AST {
 
   implicit def DummyFam[A]() = new Fam[Ast[A]#Dummy] {
     def from[Ix](phi: DummyAst[A, Ix], index: Ix): PfAst[A]#Pf[I0, Ix] = {
-      // phi match {
-      // case _: Ast[_]#DummyExpr =>
-          index match {
-            case Const(i)  => LefT(TagT(LefT(                   CT(ConstC(), KT[Int, I0[Ix]](i))),                                                      index))
-            case Add(l, r) => LefT(TagT(RighT(LefT(             CT(AddC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r)))))),   index))
-            case Mul(l, r) => LefT(TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index))
-            case Var(v)    => LefT(TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index))
-            case Let(d, e) => LefT(TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index))
-        // }
-        // case _: Ast[_]#DummyDecl => index {
-        case Assign(v, e) => RighT(TagT(LefT(       CT(AssignC(), ProductT(IT[I0[Var[Any]], Ix](I0(v)), IT[I0[Expr[Any]], Ix](I0(e))))), index))
-        case Seq(ds)      => RighT(TagT(RighT(LefT( CT(SeqC(),    DT(ds.map(s => IT[I0[Decl[Any]], Ix](I0(s))))))),                      index))
-        case None         => RighT(TagT(RighT(RighT(CT(NoneC(),   UT[I0[Ix]]()))),                                                       index))
-          // }
-          // case _: Ast[_]#DummyVar => index match {
-          //   case Var(v)    => p.SumR(p.SumR(p.TagX(p.SumL(p.CX(p.KX(v))))))
-          }
-      // }
+      phi match {
+        case _: Ast[_]#DummyExpr => index match {
+          case Const(i)  => LefT(TagT(LefT(                   CT(ConstC(), KT[Int, I0[Ix]](i))),                                                      index))
+          case Add(l, r) => LefT(TagT(RighT(LefT(             CT(AddC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r)))))),   index))
+          case Mul(l, r) => LefT(TagT(RighT(RighT(LefT(       CT(MulC(),   ProductT(IT[I0[Expr[Any]], Ix](I0(l)), IT[I0[Expr[Any]], Ix](I0(r))))))),  index))
+          case Var(v)    => LefT(TagT(RighT(RighT(RighT(LefT( CT(VarC(),   KT[Any, I0[Ix]](v)))))),                                                   index))
+          case Let(d, e) => LefT(TagT(RighT(RighT(RighT(RighT(CT(LetC(),   ProductT(IT[I0[Decl[Any]], Ix](I0(d)), IT[I0[Expr[Any]], Ix](I0(e)))))))), index))
+        }
+        case _: Ast[_]#DummyDecl => index match {
+          case Assign(v, e) => RighT(LefT(TagT(LefT(       CT(AssignC(), ProductT(IT[I0[Var[Any]], Ix](I0(v)), IT[I0[Expr[Any]], Ix](I0(e))))), index)))
+          case Seq(ds)      => RighT(LefT(TagT(RighT(LefT( CT(SeqC(),    DT(ds.map(s => IT[I0[Decl[Any]], Ix](I0(s))))))),                      index)))
+          case None         => RighT(LefT(TagT(RighT(RighT(CT(NoneC(),   UT[I0[Ix]]()))),                                                       index)))
+        }
+        case _: Ast[_]#DummyVar => index match {
+          case Var(v) => RighT(RighT(TagT(CT(VarC(), KT[Any, I0[Ix]](v)), index)))
+        }
+      }
     }
 
     def to[Ix](phi: Ast[A]#Dummy[Ix], pf: PfAst[A]#Pf[I0, Ix]):
