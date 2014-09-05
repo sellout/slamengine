@@ -4,6 +4,7 @@ import scalaz.{Tree => ZTree, _}
 import scalaz.std.list._
 
 import fixplate._
+import slamdata.engine.fp._
 
 sealed trait Diff[F[_]]
 object Diff {

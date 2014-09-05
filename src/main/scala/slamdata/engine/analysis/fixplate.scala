@@ -8,6 +8,7 @@ import Scalaz._
 import Id.Id
 
 import slamdata.engine.{RenderTree, Terminal, NonTerminal}
+import slamdata.engine.fp._
 
 sealed trait term {
   case class Term[F[_]](unFix: F[Term[F]]) {
@@ -131,14 +132,6 @@ sealed trait term {
 
     def cata[A](f: F[A] => A)(implicit F: Functor[F]): A = f(F.map(unFix)(_.cata(f)(F)))
 
-    def merga[A](that: Term[F])(differentShapeF: (F[Term[F]], F[Term[F]]) => A, sameShapeF: (F[Term[F]], F[Term[F]], F[A]) => A)(implicit FF: Functor[F], FM: Merge[F]): A = {
-      var (l, r) = (this.unFix, that.unFix)
-      FM.mergeWith(l, r)(
-        differentShapeF,
-        _.merga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
-          .fold(identity, sameShapeF(l, r, _))
-    }
-
     def para[A](f: F[(Term[F], A)] => A)(implicit F: Functor[F]): A = f(F.map(unFix)(t => t -> t.para(f)(F)))
 
     def para2[A](f: (Term[F], F[A]) => A)(implicit F: Functor[F]): A = f(this, F.map(unFix)(_.para2(f)(F)))
@@ -146,15 +139,18 @@ sealed trait term {
     def paraList[A](f: (Term[F], List[A]) => A)(implicit F: Functor[F], F2: Foldable[F]): A = {
       f(this, F2.foldMap(unFix)(_.paraList(f)(F, F2) :: Nil))
     }
-  }
 
-  trait Merge[F[_]] { self =>
-    def merge[A,B](fa: => F[A], fb: => F[B]): (F[A], F[B]) \/ F[(A, B)]
-    def mergeWith[A, B, C](fa: => F[A], fb: => F[B])(differentShapeF: (F[A], F[B]) => C, sameShapeF: (A, B) => C)(implicit F: Functor[F]): C \/ F[C] =
-      merge(fa, fb).bimap (
-        { case (a, b) => differentShapeF(a, b) },
-        _.map { case (a, b) => sameShapeF(a, b) }
-      )
+    def merga[A](that: Term[F])(
+      differentShapeF: (F[Term[F]], F[Term[F]]) => A,
+      sameShapeF: (F[Term[F]], F[Term[F]], F[A]) => A)(
+      implicit FF: Functor[F], FM: Merge[F]):
+        A = {
+      var (l, r) = (this.unFix, that.unFix)
+      FM.mergeWith(l, r)(
+        differentShapeF,
+        _.merga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
+          .fold(identity, sameShapeF(l, r, _))
+    }
   }
 
   sealed trait TermInstances {
