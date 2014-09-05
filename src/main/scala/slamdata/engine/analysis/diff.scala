@@ -56,43 +56,43 @@ object Diff {
 trait Diffable[F[+_]] {
   import Diff._
 
-  def dift0(differLocally: Boolean)(left: F[Term[F]], right: F[Any])(f: => F[Diff[F]]):
+  def dift0(sameLocally: Boolean)(left: F[Term[F]], right: F[Any])(f: => F[Diff[F]]):
       Diff[F] =
-    if (differLocally) Same(left)
+    if (sameLocally) Same(left)
     else LocallyDifferent(f, right)
-  def dift(differLocally: Boolean, a: Diff[F])(left: F[Term[F]], right: F[Any])(f: Diff[F] => F[Diff[F]]):
+  def dift(sameLocally: Boolean, a: Diff[F])(left: F[Term[F]], right: F[Any])(f: Diff[F] => F[Diff[F]]):
       Diff[F] =
-    if (differLocally)
+    if (sameLocally)
       a match {
         case Same(_) => Same(left)
         case _       => Similar(f(a))
       }
       else LocallyDifferent(f(a), right)
-  def dift2(differLocally: Boolean, a: Diff[F], b: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (differLocally)
+  def dift2(sameLocally: Boolean, a: Diff[F], b: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
+    if (sameLocally)
       (a, b) match {
         case (Same(_), Same(_)) => Same(left)
         case _                  => Similar(f(a, b))
       }
       else LocallyDifferent(f(a, b), right)
 
-  def dift3(differLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (differLocally)
+  def dift3(sameLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
+    if (sameLocally)
       (a, b, c) match {
         case (Same(_), Same(_), Same(_)) => Same(left)
         case _                           => Similar(f(a, b, c))
       }
       else LocallyDifferent(f(a, b, c), right)
-  def dift4(differLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F], d: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (differLocally)
+  def dift4(sameLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F], d: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
+    if (sameLocally)
       (a, b, c, d) match {
         case (Same(_), Same(_), Same(_), Same(_)) => Same(left)
         case _                                    => Similar(f(a, b, c, d))
       }
       else LocallyDifferent(f(a, b, c, d), right)
-  def diftl(differLocally: Boolean, g: List[Diff[F]])(left: F[Term[F]], right: F[Any])(f: List[Diff[F]] => F[Diff[F]]):
+  def diftl(sameLocally: Boolean, g: List[Diff[F]])(left: F[Term[F]], right: F[Any])(f: List[Diff[F]] => F[Diff[F]]):
       Diff[F] =
-    if (differLocally)
+    if (sameLocally)
       if (Nil == g.filter(_ match {
         case Same(_) => false
         case _       => true
