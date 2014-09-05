@@ -54,7 +54,7 @@ object Diff {
     }
 }
 
-trait Diffable[F[+_]] {
+trait Diffable[F[_]] {
   import Diff._
 
   def dift0(sameLocally: Boolean)(left: F[Term[F]], right: F[Any])(f: => F[Diff[F]]):
@@ -106,4 +106,7 @@ trait Diffable[F[+_]] {
 
   def diff(left: Term[F], right: Term[F])(implicit FF: Functor[F], FM: Merge[F]): Diff[F] =
     left.merga(right)(Different(_, _), diffImpl)
+}
+object Diffable {
+  @inline def apply[F[_]](implicit F: Diffable[F]): Diffable[F] = F
 }
