@@ -4,6 +4,7 @@ import scala.reflect.ClassTag
 
 import org.specs2.mutable._
 import org.specs2.matcher._
+import slamdata.engine.analysis._
 
 import scalaz._
 
@@ -121,20 +122,21 @@ trait DisjunctionMatchers {
 
 trait TermLogicalPlanMatchers {
   import slamdata.engine.analysis.fixplate._
+  import slamdata.engine.fp._
   import slamdata.engine.analysis._
 
-  case class equalToPlan(expected: Term[LogicalPlan]) extends Matcher[Term[LogicalPlan]] {
+  case class equalToPlan(expected: Term[LogicalPlan])
+      extends Matcher[Term[LogicalPlan]] {
     val equal = Equal[Term[LogicalPlan]].equal _
+    val showT = Show[Term[LogicalPlan]].show _
+    val showD = Show[Diff[LogicalPlan]].show _
+    val diff = Diffable[LogicalPlan].diff _
 
-    def apply[S <: Term[LogicalPlan]](s: Expectable[S]) = {
+    def apply[S <: Term[LogicalPlan]](s: Expectable[S]) =
       result(
         equal(expected, s.value),
-        "\nthe trees are equal",
-        "\nthe trees are not equal:\n" +
-          Show[Diff[LogicalPlan]].show(LogicalPlan.LogicalPlanDiff.diff(
-            expected,
-            s.value)),
+        "\nthe trees are equal\n" + showT(expected),
+        "\nthe trees are not equal:\n" + showD(diff(expected, s.value)),
         s)
-    }
   }
 }
