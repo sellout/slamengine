@@ -118,51 +118,73 @@ object LogicalPlan {
   implicit val MergeLogicalPlan = new Merge[LogicalPlan] {
     def merge[A, B](fa: => LogicalPlan[A], fb: => LogicalPlan[B]) =
       (fa, fb) match {
-        case (left @ Read0(_), Read0(_)) => \/-(left)
-        case (left @ Constant0(_), Constant0(_)) => \/-(left)
-        case (Join0(lleft, lright, tpe, rel, lleftKey, lrightKey),
-              Join0(rleft, rright, _,   _,   rleftKey, rrightKey)) =>
+        case (left @ Read0(path1), Read0(path2)) if path1 == path2 => \/-(left)
+        case (left @ Constant0(data1), Constant0(data2)) if data1 == data2 =>
+          \/-(left)
+        case (Join0(lleft, lright, tpe1, rel1, lleftKey, lrightKey),
+              Join0(rleft, rright, tpe2, rel2, rleftKey, rrightKey))
+            if tpe1 == tpe2 && rel1 == rel2 =>
           \/-(Join0(
             (lleft, rleft), (lright, rright),
-            tpe, rel,
+            tpe1, rel1,
             (lleftKey, rleftKey), (lrightKey, rrightKey)))
-        case (Invoke0(func, lvalues), Invoke0(_, rvalues)) =>
-          \/-(Invoke0(func, lvalues zip rvalues))
-        case (left @ Free0(_), Free0(_)) => \/-(left)
-        case (Let0(ident, lform, lin), Let0(_, rform, rin)) =>
-          \/-(Let0(ident, (lform, rform), (lin, rin)))
+        case (Invoke0(func1, lvalues), Invoke0(func2, rvalues))
+            if func1 == func2 && lvalues.length == rvalues.length =>
+          \/-(Invoke0(func1, lvalues zip rvalues))
+        case (left @ Free0(name1), Free0(name2)) if name1 == name2 => \/-(left)
+        case (Let0(ident1, lform, lin), Let0(ident2, rform, rin))
+            if ident1 == ident2 =>
+          \/-(Let0(ident1, (lform, rform), (lin, rin)))
         case x => -\/(x)
       }
   }
 
   implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
-    def diffImpl(
+    import Diff._
+    def sameImpl(
       left: LogicalPlan[Term[LogicalPlan]],
       right: LogicalPlan[Term[LogicalPlan]],
       merged: LogicalPlan[Diff[LogicalPlan]]):
         Diff[LogicalPlan] =
-      (left, right, merged) match {
-        case (Read0(path1), Read0(path2), _) =>
-          dift0(path1 == path2)(left, right)(merged)
-        case (Constant0(data1), Constant0(data2), _) =>
-          dift0(data1 == data2)(left, right)(merged)
-        case (Join0(_,  _,     tpe1, rel1, _,     _),
-              Join0(_,  _,     tpe2, rel2, _,     _),
-              Join0(l, r, _,    _,    lproj, rproj)) =>
-          dift4(
-            tpe1 == tpe2 && rel1 == rel2, l, r, lproj, rproj)(
-            left, right)(
-            Join0(_, _, tpe1, rel1, _, _))
-        case (Invoke0(func1, v1), Invoke0(func2, v2), Invoke0(_, values)) =>
-          diftl(
-            func1 == func2 && v1.length == v2.length, values)(
-            left, right)(
-            Invoke0(func1, _))
-        case (Free0(name1), Free0(name2), _) =>
-          dift0(name1 == name2)(left, right)(merged)
-        case (Let0(ident1, _, _), Let0(ident2, _, _), Let0(_, form, in)) =>
-          dift2(ident1 == ident2, form, in)(left, right)(Let0(ident1, _, _))
-        case _ => Diff.Different(left, right) // NB: never get here, but works
+      merged match {
+        case Read0(_)                                        => Same(left)
+        case Constant0(_)                                    => Same(left)
+        case Join0(Same(_), Same(_), _, _, Same(_), Same(_)) => Same(left)
+        case Join0(_, _, _, _, _, _)                         => Similar(merged)
+        case Invoke0(_, args)                                =>
+          if (args.length == args.collect { case Same(_) => () }.length)
+            Same(left)
+          else Similar(merged)
+        case Free0(_)                                        => Same(left)
+        case Let0(_, Same(_), Same(_))                       => Same(left)
+        case Let0(_, _, _)                                   => Similar(merged)
+      }
+    def diffImpl(
+      left: LogicalPlan[Term[LogicalPlan]],
+      right: LogicalPlan[Term[LogicalPlan]]):
+        Diff[LogicalPlan] =
+      (left, right) match {
+        case (l @ Read0(_), Read0(_)) => LocallyDifferent[LogicalPlan](l, right)
+        case (l @ Constant0(_), Constant0(_)) =>
+          LocallyDifferent[LogicalPlan](l, right)
+        case (Join0(l1, r1, tpe, rel, lproj1, rproj1),
+              Join0(l2, r2, _,   _,   lproj2, rproj2)) =>
+          LocallyDifferent[LogicalPlan](
+            Join0(
+              diff(l1, l2), diff(r1, r2),
+              tpe, rel,
+              diff(lproj1, lproj2), diff(rproj1, rproj2)),
+            right)
+        case (Invoke0(func, v1), Invoke0(_, v2)) if v1.length == v2.length =>
+          LocallyDifferent[LogicalPlan](
+            Invoke0(func, Zip[List].zipWith(v1, v2)(diff)),
+            right)
+        case (l @ Free0(_), Free0(_)) => LocallyDifferent[LogicalPlan](l, right)
+        case (Let0(ident, form1, in1), Let0(_, form2, in2)) =>
+          LocallyDifferent[LogicalPlan](
+            Let0(ident, diff(form1, form2), diff(in1, in2)),
+            right)
+        case _ => Different(left, right)
       }
   }
 

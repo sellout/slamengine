@@ -57,55 +57,11 @@ object Diff {
 trait Diffable[F[_]] {
   import Diff._
 
-  def dift0(sameLocally: Boolean)(left: F[Term[F]], right: F[Any])(f: => F[Diff[F]]):
-      Diff[F] =
-    if (sameLocally) Same(left)
-    else LocallyDifferent(f, right)
-  def dift(sameLocally: Boolean, a: Diff[F])(left: F[Term[F]], right: F[Any])(f: Diff[F] => F[Diff[F]]):
-      Diff[F] =
-    if (sameLocally)
-      a match {
-        case Same(_) => Same(left)
-        case _       => Similar(f(a))
-      }
-      else LocallyDifferent(f(a), right)
-  def dift2(sameLocally: Boolean, a: Diff[F], b: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (sameLocally)
-      (a, b) match {
-        case (Same(_), Same(_)) => Same(left)
-        case _                  => Similar(f(a, b))
-      }
-      else LocallyDifferent(f(a, b), right)
-
-  def dift3(sameLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (sameLocally)
-      (a, b, c) match {
-        case (Same(_), Same(_), Same(_)) => Same(left)
-        case _                           => Similar(f(a, b, c))
-      }
-      else LocallyDifferent(f(a, b, c), right)
-  def dift4(sameLocally: Boolean, a: Diff[F], b: Diff[F], c: Diff[F], d: Diff[F])(left: F[Term[F]], right: F[Any])(f: (Diff[F], Diff[F], Diff[F], Diff[F]) => F[Diff[F]]): Diff[F] =
-    if (sameLocally)
-      (a, b, c, d) match {
-        case (Same(_), Same(_), Same(_), Same(_)) => Same(left)
-        case _                                    => Similar(f(a, b, c, d))
-      }
-      else LocallyDifferent(f(a, b, c, d), right)
-  def diftl(sameLocally: Boolean, g: List[Diff[F]])(left: F[Term[F]], right: F[Any])(f: List[Diff[F]] => F[Diff[F]]):
-      Diff[F] =
-    if (sameLocally)
-      if (Nil == g.filter(_ match {
-        case Same(_) => false
-        case _       => true
-      }))
-        Same(left)
-      else Similar(f(g))
-      else LocallyDifferent(f(g), right)
-
-  def diffImpl(left: F[Term[F]], right: F[Term[F]], merged: F[Diff[F]]): Diff[F]
+  def sameImpl(left: F[Term[F]], right: F[Term[F]], merged: F[Diff[F]]): Diff[F]
+  def diffImpl(left: F[Term[F]], right: F[Term[F]]): Diff[F]
 
   def diff(left: Term[F], right: Term[F])(implicit FF: Functor[F], FM: Merge[F]): Diff[F] =
-    left.merga(right)(Different(_, _), diffImpl)
+    left.paramerga(right)(diffImpl, sameImpl)
 }
 object Diffable {
   @inline def apply[F[_]](implicit F: Diffable[F]): Diffable[F] = F

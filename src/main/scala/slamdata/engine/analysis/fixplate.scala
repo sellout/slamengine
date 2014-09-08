@@ -142,13 +142,23 @@ sealed trait term {
 
     def merga[A](that: Term[F])(
       differentShapeF: (F[Term[F]], F[Term[F]]) => A,
+      sameShapeF: F[A] => A)(
+      implicit FF: Functor[F], FM: Merge[F]):
+        A =
+      FM.mergeWith(this.unFix, that.unFix)(
+        differentShapeF,
+        _.merga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
+          .fold(identity, sameShapeF)
+
+    def paramerga[A](that: Term[F])(
+      differentShapeF: (F[Term[F]], F[Term[F]]) => A,
       sameShapeF: (F[Term[F]], F[Term[F]], F[A]) => A)(
       implicit FF: Functor[F], FM: Merge[F]):
         A = {
-      var (l, r) = (this.unFix, that.unFix)
+      val (l, r) = (this.unFix, that.unFix)
       FM.mergeWith(l, r)(
         differentShapeF,
-        _.merga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
+        _.paramerga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
           .fold(identity, sameShapeF(l, r, _))
     }
   }
