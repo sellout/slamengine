@@ -146,13 +146,16 @@ package object fp extends TreeInstances with ListMapInstances with ToTaskOps wit
   }
 
   trait Merge[F[_]] { self =>
-    def merge[A,B](fa: => F[A], fb: => F[B]): (F[A], F[B]) \/ F[(A, B)]
+    def merge[A,B](fa: => F[A], fb: => F[B]): Option[F[(A, B)]]
     def mergeWith[A, B, C](
       fa: => F[A], fb: => F[B])(
       differentShapeF: (F[A], F[B]) => C, sameShapeF: (A, B) => C)(
       implicit F: Functor[F]):
         C \/ F[C] =
-      merge(fa, fb).bimap(differentShapeF.tupled, _.map(sameShapeF.tupled))
+      merge(fa, fb) match {
+        case None         => -\/(differentShapeF(fa, fb))
+        case Some(merged) => \/-(merged.map(sameShapeF.tupled))
+      }
   }
 
   trait Empty[F[_]] {
