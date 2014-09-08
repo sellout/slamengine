@@ -141,24 +141,6 @@ object LogicalPlan {
 
   implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
     import Diff._
-    def sameImpl(
-      left: LogicalPlan[Term[LogicalPlan]],
-      right: LogicalPlan[Term[LogicalPlan]],
-      merged: LogicalPlan[Diff[LogicalPlan]]):
-        Diff[LogicalPlan] =
-      merged match {
-        case Read0(_)                                        => Same(left)
-        case Constant0(_)                                    => Same(left)
-        case Join0(Same(_), Same(_), _, _, Same(_), Same(_)) => Same(left)
-        case Join0(_, _, _, _, _, _)                         => Similar(merged)
-        case Invoke0(_, args)                                =>
-          if (args.length == args.collect { case Same(_) => () }.length)
-            Same(left)
-          else Similar(merged)
-        case Free0(_)                                        => Same(left)
-        case Let0(_, Same(_), Same(_))                       => Same(left)
-        case Let0(_, _, _)                                   => Similar(merged)
-      }
     def diffImpl(
       left: LogicalPlan[Term[LogicalPlan]],
       right: LogicalPlan[Term[LogicalPlan]]):
