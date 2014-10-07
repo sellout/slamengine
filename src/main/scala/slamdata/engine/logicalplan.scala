@@ -115,30 +115,6 @@ object LogicalPlan {
     }
   }
 
-  implicit val MergeLogicalPlan = new Merge[LogicalPlan] {
-    def merge[A, B](fa: => LogicalPlan[A], fb: => LogicalPlan[B]) =
-      (fa, fb) match {
-        case (left @ Read0(path1), Read0(path2)) if path1 == path2 => Some(left)
-        case (left @ Constant0(data1), Constant0(data2)) if data1 == data2 =>
-          Some(left)
-        case (Join0(lleft, lright, tpe1, rel1, lleftKey, lrightKey),
-              Join0(rleft, rright, tpe2, rel2, rleftKey, rrightKey))
-            if tpe1 == tpe2 && rel1 == rel2 =>
-          Some(Join0(
-            (lleft, rleft), (lright, rright),
-            tpe1, rel1,
-            (lleftKey, rleftKey), (lrightKey, rrightKey)))
-        case (Invoke0(func1, lvalues), Invoke0(func2, rvalues))
-            if func1 == func2 && lvalues.length == rvalues.length =>
-          Some(Invoke0(func1, lvalues zip rvalues))
-        case (left @ Free0(name1), Free0(name2)) if name1 == name2 => Some(left)
-        case (Let0(ident1, lform, lin), Let0(ident2, rform, rin))
-            if ident1 == ident2 =>
-          Some(Let0(ident1, (lform, rform), (lin, rin)))
-        case _ => None
-      }
-  }
-
   implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
     import Diff._
     def diffImpl(
