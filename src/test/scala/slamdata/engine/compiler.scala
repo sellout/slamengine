@@ -149,13 +149,13 @@ class CompilerSpec extends Specification with CompilerHelpers {
       // 'foo' must be interpreted as a projection because only this interpretation is possible
       testLogicalPlanCompile(
         "select foo.bar from baz",        
-        Let('tmp0, read("baz"),
+        Let('tmp0, Free('baz),
           Let('tmp1,
             makeObj(
               "bar" ->
                 ObjectProject(
                   ObjectProject(Free('tmp0), Constant(Data.Str("foo"))),
-                  Constant(Data.Str("bar")))),
+                  read("boo"))),
             Squash(
               Free('tmp1)))))
     }
