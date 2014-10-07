@@ -59,14 +59,17 @@ trait Diffable[F[_]] {
 
   def diffImpl(left: F[Term[F]], right: F[Term[F]]): Diff[F]
 
-  def diff(left: Term[F], right: Term[F])(implicit FF: Functor[F], FoldF: Foldable[F], FM: Merge[F]): Diff[F] =
-    left.paramerga(right)(
-      diffImpl,
-      { (left, right, merged: F[Diff[F]]) =>
-        val children = FoldF.foldMap(merged)(_ :: Nil)
-        if (children.length == children.collect { case Same(_) => () }.length)
-          Same(left)
-        else Similar(merged)
+  def diff(left: Term[F], right: Term[F])(
+    implicit FF: Functor[F], FoldF: Foldable[F], FM: Merge[F]):
+      Diff[F] =
+    left.paramerga(right)((l, r, merged: Option[F[Diff[F]]]) =>
+      merged match {
+        case None         => diffImpl(l, r)
+        case Some(merged) =>
+          val children = FoldF.foldMap(merged)(_ :: Nil)
+          if (children.length == children.collect { case Same(_) => () }.length)
+            Same(l)
+          else Similar(merged)
       })
 }
 object Diffable {

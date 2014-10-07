@@ -140,26 +140,24 @@ sealed trait term {
       f(this, F2.foldMap(unFix)(_.paraList(f)(F, F2) :: Nil))
     }
 
-    def merga[A](that: Term[F])(
-      differentShapeF: (F[Term[F]], F[Term[F]]) => A,
-      sameShapeF: F[A] => A)(
+    def merga[A](that: Term[F])(f: (F[Term[F]], F[Term[F]]) \/ F[A] => A)(
       implicit FF: Functor[F], FM: Merge[F]):
         A =
-      FM.mergeWith(this.unFix, that.unFix)(
-        differentShapeF,
-        _.merga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
-          .fold(identity, sameShapeF)
+      FM.mergeWith(this.unFix, that.unFix)(_ match {
+        case -\/(x)      => f(-\/(x))
+        case \/-((a, b)) => a.merga(b)(f)(FF, FM)
+      })(FF).fold(identity, x => f(\/-(x)))
 
-    def paramerga[A](that: Term[F])(
-      differentShapeF: (F[Term[F]], F[Term[F]]) => A,
-      sameShapeF: (F[Term[F]], F[Term[F]], F[A]) => A)(
+    def paramerga[A](
+      that: Term[F])(
+      f: (F[Term[F]], F[Term[F]], Option[F[A]]) => A)(
       implicit FF: Functor[F], FM: Merge[F]):
         A = {
       val (l, r) = (this.unFix, that.unFix)
-      FM.mergeWith(l, r)(
-        differentShapeF,
-        _.paramerga(_)(differentShapeF, sameShapeF)(FF, FM))(FF)
-          .fold(identity, sameShapeF(l, r, _))
+      FM.mergeWith(l, r)(_ match {
+        case -\/((a, b)) => f(a, b, None)
+        case \/-((a, b)) => a.paramerga(b)(f)(FF, FM)
+      })(FF).fold(identity, x => f(l, r, Some(x)))
     }
   }
 
