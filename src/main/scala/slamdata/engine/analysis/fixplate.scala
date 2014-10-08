@@ -140,6 +140,20 @@ sealed trait term {
       f(this, F2.foldMap(unFix)(_.paraList(f)(F, F2) :: Nil))
     }
 
+    def zippa[A](that: Term[F])(f: F[A] => A)(
+      implicit FF: Functor[F], FZ: Zip[F]):
+        A =
+      f(FZ.zipWith(this.unFix, that.unFix) {
+        case (a, b) => a.zippa(b)(f)(FF, FZ)
+      })
+
+    def parazippa[A](that: Term[F])(f: (F[Term[F]], F[Term[F]], F[A]) => A)(
+      implicit FF: Functor[F], FZ: Zip[F]):
+        A = {
+      val (l, r) = (this.unFix, that.unFix)
+      f(l, r, FZ.zipWith(l, r)(_.parazippa(_)(f)(FF, FZ)))
+    }
+
     def merga[A](that: Term[F])(f: (F[Term[F]], F[Term[F]]) \/ F[A] => A)(
       implicit FF: Functor[F], FM: Merge[F]):
         A =
