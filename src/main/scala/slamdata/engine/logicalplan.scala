@@ -116,33 +116,19 @@ object LogicalPlan {
   }
 
   implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
-    import Diff._
     def diffImpl(
       left: LogicalPlan[Term[LogicalPlan]],
-      right: LogicalPlan[Term[LogicalPlan]]):
-        Diff[LogicalPlan] =
+      right: LogicalPlan[Term[LogicalPlan]]) =
       (left, right) match {
-        case (l @ Read0(_), Read0(_)) => LocallyDifferent[LogicalPlan](l, right)
-        case (l @ Constant0(_), Constant0(_)) =>
-          LocallyDifferent[LogicalPlan](l, right)
-        case (Join0(l1, r1, tpe, rel, lproj1, rproj1),
-              Join0(l2, r2, _,   _,   lproj2, rproj2)) =>
-          LocallyDifferent[LogicalPlan](
-            Join0(
-              diff(l1, l2), diff(r1, r2),
-              tpe, rel,
-              diff(lproj1, lproj2), diff(rproj1, rproj2)),
-            right)
-        case (Invoke0(func, v1), Invoke0(_, v2)) if v1.length == v2.length =>
-          LocallyDifferent[LogicalPlan](
-            Invoke0(func, Zip[List].zipWith(v1, v2)(diff)),
-            right)
-        case (l @ Free0(_), Free0(_)) => LocallyDifferent[LogicalPlan](l, right)
-        case (Let0(ident, form1, in1), Let0(_, form2, in2)) =>
-          LocallyDifferent[LogicalPlan](
-            Let0(ident, diff(form1, form2), diff(in1, in2)),
-            right)
-        case _ => Different(left, right)
+        case (l @ Read0(_), Read0(_)) => { case Nil => l }
+        case (l @ Constant0(_), Constant0(_)) => { case Nil => l }
+        case (Join0(_, _, tpe, rel, _, _), Join0(_, _, _, _, _, _)) =>
+          { case List(a, b, c, d) => Join0(a, b, tpe, rel, c, d) }
+        case (Invoke0(func, _), Invoke0(_, _)) => { case x => Invoke0(func, x) }
+        case (l @ Free0(_), Free0(_)) => { case Nil => l }
+        case (Let0(ident, _, _), Let0(_, _, _)) =>
+          { case List(a, b) => Let0(ident, a, b) }
+        case _ => PartialFunction.empty
       }
   }
 

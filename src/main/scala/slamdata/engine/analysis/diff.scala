@@ -2,6 +2,7 @@ package slamdata.engine.analysis
 
 import scalaz.{Tree => ZTree, _}
 import scalaz.std.list._
+import scalaz.syntax.zip._
 
 import fixplate._
 import slamdata.engine.fp._
@@ -13,7 +14,7 @@ object Diff {
   /** This node is the same, but it has at least one branch that differs */
   case class Similar[F[_]](ident: F[Diff[F]]) extends Diff[F]
   /** This node differs, but only in its parameters, not its shape. */
-  case class LocallyDifferent[F[_]](left: F[Diff[F]], right: F[Any])
+  case class LocallyDifferent[F[_]](left: F[Diff[F]], right: F[Unit])
       extends Diff[F]
   /** This node exists only in the right tree, but some descendent is similar */
   case class Inserted[F[_]](right: F[Diff[F]]) extends Diff[F]
@@ -23,7 +24,7 @@ object Diff {
   case class Different[F[_]](left: F[Term[F]], right: F[Term[F]])
       extends Diff[F]
   /** This node has some incomparable value. */
-  case class Unknown[F[_]](left: F[Diff[F]], right: F[Any])
+  case class Unknown[F[_]](left: F[Diff[F]], right: F[Unit])
       extends Diff[F]
 
   implicit def ShowDiff[F[_]](implicit showF: Show[F[_]], foldF: Foldable[F]) =
@@ -69,14 +70,27 @@ object Diff {
 trait Diffable[F[_]] {
   import Diff._
 
-  def diffImpl(left: F[Term[F]], right: F[Term[F]]): Diff[F]
+  /**
+    Returns a function that maps the elements of the list to the parameterized
+    fields in the structure, with the non-parameterized fields using their left
+    values.
+    */
+  def diffImpl(left: F[Term[F]], right: F[Term[F]]):
+      PartialFunction[List[Diff[F]], F[Diff[F]]]
 
   def diff(left: Term[F], right: Term[F])(
     implicit FF: Functor[F], FoldF: Foldable[F], FM: Merge[F]):
       Diff[F] =
     left.paramerga(right)((l, r, merged: Option[F[Diff[F]]]) =>
       merged match {
-        case None         => diffImpl(l, r)
+        case None         =>
+          val lchildren = FoldF.foldMap(l)(_ :: Nil)
+          val rchildren = FoldF.foldMap(l)(_ :: Nil)
+          if (lchildren.length == rchildren.length)
+            (diffImpl(l, r).lift)(Zip[List].zipWith(lchildren, rchildren)(diff(_, _))).fold[Diff[F]](
+              Different(l, r))(
+              LocallyDifferent(_, FF.map(r)(Function.const(()))))
+          else Different(l, r)
         case Some(merged) =>
           val children = FoldF.foldMap(merged)(_ :: Nil)
           if (children.length == children.collect { case Same(_) => () }.length)
