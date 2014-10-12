@@ -88,7 +88,6 @@ object LogicalPlan {
       }
     }
   }
-
   implicit val RenderTreeLogicalPlan: RenderTree[LogicalPlan[_]] = new RenderTree[LogicalPlan[_]] {
     // Note: these are all terminals; the wrapping Term or Attr will use these to build nodes with children.
     override def render(v: LogicalPlan[_]) = v match {
@@ -114,22 +113,16 @@ object LogicalPlan {
       case _ => false
     }
   }
-
   implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
-    def diffImpl(
-      left: LogicalPlan[Term[LogicalPlan]],
-      right: LogicalPlan[Term[LogicalPlan]]) =
-      (left, right) match {
-        case (l @ Read0(_), Read0(_)) => { case Nil => l }
-        case (l @ Constant0(_), Constant0(_)) => { case Nil => l }
-        case (Join0(_, _, tpe, rel, _, _), Join0(_, _, _, _, _, _)) =>
-          { case List(a, b, c, d) => Join0(a, b, tpe, rel, c, d) }
-        case (Invoke0(func, _), Invoke0(_, _)) => { case x => Invoke0(func, x) }
-        case (l @ Free0(_), Free0(_)) => { case Nil => l }
-        case (Let0(ident, _, _), Let0(_, _, _)) =>
-          { case List(a, b) => Let0(ident, a, b) }
-        case _ => PartialFunction.empty
-      }
+    val diffImpl: DiffImpl[LogicalPlan] = {
+      case (l @ Read0(_),      r @ Read0(_))       => localDiff(l, r)
+      case (l @ Constant0(_),  r @ Constant0(_))   => localDiff(l, r)
+      case (l @ Join0(_, _, _, _, _, _), r @ Join0(_, _, _, _, _, _)) =>
+        localDiff(l, r)
+      case (l @ Invoke0(_, _), r @ Invoke0(_, _)) => localDiff(l, r)
+      case (l @ Free0(_),      r @ Free0(_))      => localDiff(l, r)
+      case (l @ Let0(_, _, _), r @ Let0(_, _, _)) => localDiff(l, r)
+    }
   }
 
   import slamdata.engine.analysis.fixplate.{Attr => FAttr}
