@@ -49,9 +49,10 @@ class DiffSpec extends Specification {
 
   "diff" should {
     import Diff._
+    val diff = Diffable[Example].diff _
 
     "create `Removed` for shorter list" in {
-      ExampleDiff.diff(
+      diff(
         Term(OneList(List(Term[Example](Empty), Term[Example](Empty)))),
         Term(OneList(List(Term[Example](NonRecursive("x", 3)))))) must_==
       Similar[Example](OneList(List(
@@ -60,7 +61,7 @@ class DiffSpec extends Specification {
     }
 
     "create `Added` for longer list" in {
-      ExampleDiff.diff(
+      diff(
         Term(OneList(List(Term[Example](NonRecursive("x", 3))))),
         Term(OneList(List(Term[Example](Empty), Term[Example](Empty))))) must_==
       Similar[Example](OneList(List(
@@ -69,7 +70,7 @@ class DiffSpec extends Specification {
     }
 
     "choose “simplest” diff" in {
-      ExampleDiff.diff(
+      diff(
         Term(OneList(List(Term[Example](Empty)))),
         Term(OneList(List(Term[Example](NonRecursive("x", 3)), Term[Example](Empty))))) must_==
       Similar[Example](OneList(List(
@@ -78,7 +79,7 @@ class DiffSpec extends Specification {
     }.pendingUntilFixed("can’t just walk lists from start to finish")
 
     "create `Removed` and `Added` for mixed lists" in {
-      ExampleDiff.diff(
+      diff(
         Term(TwoLists(
           List(Term[Example](Empty), Term[Example](Empty)),
           List(Term[Example](Empty)))),

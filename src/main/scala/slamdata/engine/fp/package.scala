@@ -158,13 +158,12 @@ package object fp extends TreeInstances with ListMapInstances with ToTaskOps wit
         case Some(merged) => \/-(merged.map(x => f(\/-(x))))
       }
   }
-  object Merge {
-    implicit def MergeTraverse[F[_]](implicit FT: Traverse[F]) = new Merge[F] {
-      def merge[A, B](fa: => F[A], fb: => F[B]): Option[F[(A, B)]] =
-        if (fa.map(Function.const(())) == fb.map(Function.const(())))
-          fa.zipWithL(fb)((a, b) => b.map((a, _))).sequence
-        else None
-    }
+
+  implicit def MergeTraverse[F[_]: Traverse] = new Merge[F] {
+    def merge[A, B](fa: => F[A], fb: => F[B]): Option[F[(A, B)]] =
+      if (fa.map(Function.const(())) == fb.map(Function.const(())))
+        fa.zipWithL(fb)((a, b) => b.map((a, _))).sequence
+      else None
   }
 
   trait Empty[F[_]] {

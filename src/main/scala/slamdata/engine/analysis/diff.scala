@@ -83,7 +83,6 @@ trait Diffable[F[_]] {
   import Diff._
 
   type DiffImpl[F[_]] = PartialFunction[(F[Term[F]], F[Term[F]]), Diff[F]]
-  // NB: With two discoveries, this could go away completely for most functors
   val diffImpl: DiffImpl[F]
 
   def diff(left: Term[F], right: Term[F])(
@@ -93,7 +92,7 @@ trait Diffable[F[_]] {
       merged match {
         case None         => (diffImpl.lift)(l, r).getOrElse(Different(l, r))
         case Some(merged) =>
-          val children = FoldF.foldMap(merged)(_ :: Nil)
+          val children = FoldF.foldMap(merged)(List(_))
           if (children.length == children.collect { case Same(_) => () }.length)
             Same(l)
           else Similar(merged)
@@ -130,25 +129,26 @@ trait Diffable[F[_]] {
 
   def localDiff(left: F[Term[F]], right: F[Term[F]])(implicit FT: Traverse[F]):
       Diff[F] =
-    FT.zipWith(left, right) {
-      case (a, Some(b)) => diff(a, b)
-      case (a, None)    => Removed(a.unFix)
-    } match {
-      case (Nil, rez) =>
-        LocallyDifferent(rez, FT.map(right)(Function.const(())))
-      case _ => FT.zipWith(right, left) {
-        case (a, Some(b)) => diff(b, a)
-        case (a, None)    => Added(a.unFix)
-      } match {
-        // FIXME: This switches the left and right sides – ARGH!
-        //        Can happen if the structure contains something like a list of
-        //        diffs, I think.
-        case (Nil, rez) =>
-          LocallyDifferent(rez, FT.map(left)(Function.const(())))
-        case _ => Different(left, right)
-      }
-    }
+    LocallyDifferent(
+      if (FT.foldMap(left)(List(_)).length < FT.foldMap(right)(List(_)).length)
+        FT.zipWithR(left, right) {
+          case (Some(a), b) => diff(a, b)
+          case (None,    b) => Added(b.unFix)
+        }
+        else
+          FT.zipWithL(left, right) {
+            case (a, Some(b)) => diff(a, b)
+            case (a, None)    => Removed(a.unFix)
+          },
+      FT.map(right)(Function.const(())))
 }
 object Diffable {
   @inline def apply[F[_]](implicit F: Diffable[F]): Diffable[F] = F
+
+  implicit def DiffableTraverse[F[_]: Traverse] = new Diffable[F] {
+    val diffImpl: DiffImpl[F] = { case (l, r) =>
+      // NB: This is it. The one hack in all of this: RTTI
+      if (l.getClass == r.getClass) localDiff(l, r) else Diff.Different(l, r)
+    }
+  }
 }

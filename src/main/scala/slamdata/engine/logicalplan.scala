@@ -113,17 +113,6 @@ object LogicalPlan {
       case _ => false
     }
   }
-  implicit val LogicalPlanDiff = new Diffable[LogicalPlan] {
-    val diffImpl: DiffImpl[LogicalPlan] = {
-      case (l @ Read0(_),                r @ Read0(_))      => localDiff(l, r)
-      case (l @ Constant0(_),            r @ Constant0(_))  => localDiff(l, r)
-      case (l @ Join0(_, _, _, _, _, _), r @ Join0(_, _, _, _, _, _)) =>
-        localDiff(l, r)
-      case (l @ Invoke0(_, _),           r @ Invoke0(_, _)) => localDiff(l, r)
-      case (l @ Free0(_),                r @ Free0(_))      => localDiff(l, r)
-      case (l @ Let0(_, _, _),           r @ Let0(_, _, _)) => localDiff(l, r)
-    }
-  }
 
   import slamdata.engine.analysis.fixplate.{Attr => FAttr}
 
@@ -310,3 +299,4 @@ object LogicalPlan {
   }
   
 }
+
