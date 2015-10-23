@@ -24,7 +24,7 @@ import quasar.fs.Path
 import optimize.pipeline._
 import quasar.javascript._, Js._
 import quasar.jscore, jscore.{JsCore, JsFn}
-import WorkflowTask._
+import quasar.physical.mongodb.workflowtask._
 
 import monocle.syntax._
 import scalaz._, Scalaz._
@@ -167,7 +167,7 @@ object Workflow {
     }
 
   def task(fop: Crystallized): WorkflowTask =
-    (WorkflowTask.finish _).tupled(fop.op.para(crush))._2
+    (workflowtask.finish _).tupled(fop.op.para(crush))._2
 
   val finish: Workflow => Workflow = reorderOps _  >>> deleteUnusedFields _
 
@@ -304,7 +304,7 @@ object Workflow {
         //       collections), we could generate a FindQuery here.
 
         lazy val nonPipeline = {
-          val (base, crushed) = (WorkflowTask.finish _).tupled(rez)
+          val (base, crushed) = (workflowtask.finish _).tupled(rez)
           (ExprVar,
             MapReduceTask(
               crushed,
@@ -356,13 +356,13 @@ object Workflow {
           case (_, (base, PipelineTask(src0, List($Match(_, sel), $Sort(_, sort), $Limit(_, count))))) =>
             op.newMR(base, src0, Some(sel), Some(sort), Some(count))
           case (_, (base, srcTask)) =>
-            val (nb, task) = WorkflowTask.finish(base, srcTask)
+            val (nb, task) = workflowtask.finish(base, srcTask)
             op.newMR(nb, task, None, None, None)
         }
       case $FoldLeft(head, tail) =>
         (ExprVar,
           FoldLeftTask(
-            (WorkflowTask.finish _).tupled(head._2)._2,
+            (workflowtask.finish _).tupled(head._2)._2,
             tail.map(_._2._2 match {
               case MapReduceTask(src, mr) =>
                 // FIXME: $FoldLeft currently always reduces, but in future we’ll
@@ -596,7 +596,7 @@ object Workflow {
 
   private def alwaysPipePipe(op: PipelineF[Workflow]):
       (DocVar, WorkflowTask, Pipeline) = {
-    lazy val (base, crushed) = (WorkflowTask.finish _).tupled(op.src.para(crush))
+    lazy val (base, crushed) = (workflowtask.finish _).tupled(op.src.para(crush))
     // TODO: this is duplicated in `WorkflowBuilder.rewrite`
     def repairBase(base: DocVar) = op match {
       case $Group(_, _, _)   => DocVar.ROOT()
@@ -607,7 +607,7 @@ object Workflow {
       case p: PipelineF[Workflow] => pipeline(p).cata(
         {
           case (base, up, prev) =>
-            val (nb, task) = WorkflowTask.finish(base, up)
+            val (nb, task) = workflowtask.finish(base, up)
             (repairBase(nb),
               task,
               prev :+ rewriteRefs(PipelineFTraverse.void(op), prefixBase(nb)))

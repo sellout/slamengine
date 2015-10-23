@@ -582,7 +582,7 @@ class WorkflowSpec extends Specification with TreeMatchers {
   }
 
   "task" should {
-    import WorkflowTask._
+    import quasar.physical.mongodb.workflowtask._
     import quasar.jscore._
 
     "convert $match with $where into map/reduce" in {
