@@ -3,7 +3,7 @@ package quasar.recursionschemes
 import quasar.Predef._
 import quasar.{RenderTree, Terminal, NonTerminal}
 import quasar.fp._
-import quasar.recursionschemes.Recursive.ops._
+import Recursive.ops._, FunctorT.ops._
 
 import org.scalacheck._
 import org.specs2.ScalaCheck
@@ -155,7 +155,7 @@ class FixplateSpecs extends Specification with ScalaCheck with ScalazMatchers {
     case _      => None
   }
 
-  val addOneƒ: Exp[Fix[Exp]] => Fix[Exp] = simply(addOneOptƒ)
+  val addOneƒ: Exp[Fix[Exp]] => Fix[Exp] = simply(addOneOptƒ) <<< (Fix(_))
 
   val simplifyƒ: Exp[Fix[Exp]] => Option[Fix[Exp]] = {
     case Mul(Fix(Num(0)), Fix(Num(_))) => num(0).some
@@ -167,7 +167,7 @@ class FixplateSpecs extends Specification with ScalaCheck with ScalazMatchers {
 
   val addOneOrSimplifyƒ: Exp[Fix[Exp]] => Fix[Exp] = {
     case t @ Num(_)    => addOneƒ(t)
-    case t @ Mul(_, _) => repeatedly(simplifyƒ).apply(t)
+    case t @ Mul(_, _) => repeatedly(simplifyƒ).apply(Fix(t))
     case t             => Fix(t)
   }
 
@@ -291,7 +291,7 @@ class FixplateSpecs extends Specification with ScalaCheck with ScalazMatchers {
 
     "liftApo" should {
       "behave like ana" ! prop { (i: Int) =>
-        Corecursive[Fix].apo(i)(liftApo(extractFactors)) must_==
+        Corecursive[Fix].apo(i)(liftApo[Fix](extractFactors)) must_==
           Corecursive[Fix].ana(i)(extractFactors)
       }
     }

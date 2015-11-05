@@ -3,7 +3,7 @@ package quasar.physical.mongodb
 import quasar.Predef._
 import quasar.RenderTree
 import quasar.fp._
-import quasar.recursionschemes._, Recursive.ops._
+import quasar.recursionschemes._, FunctorT.ops._
 import quasar._; import Planner._
 import quasar.javascript._
 import quasar.specs2._
@@ -97,7 +97,7 @@ class WorkflowBuilderSpec
         city   <- lift(projectField(read, "city"))
         array  <- arrayConcat(makeArray(city), pureArr)
         state2 <- lift(projectIndex(array, 2))
-      } yield state2.cata(normalize)).evalZero
+      } yield state2.transform(normalize)).evalZero
 
       op must beRightDisjunction(ExprBuilder(read, $literal(Bson.Int32(1)).right))
     }
@@ -447,7 +447,7 @@ class WorkflowBuilderSpec
       val readFoo = CollectionBuilder($read(Collection("db", "foo")), Root(), None)
 
       "collapse simple reference to JS" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -463,7 +463,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference in ExprOp" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -479,7 +479,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference to JS in ExprOp" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -498,7 +498,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference through $$ROOT" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -514,7 +514,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse JS reference" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -533,7 +533,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse expression that contains a projection" in {
-        val w = DocBuilderF(
+        val w = DocBuilder(
           DocBuilder(
             readFoo,
             ListMap(
@@ -556,7 +556,7 @@ class WorkflowBuilderSpec
 
       "collapse this" in {
         val w =
-          DocBuilderF(
+          DocBuilder(
             DocBuilder(
               DocBuilder(
                 readFoo,

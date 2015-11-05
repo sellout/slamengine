@@ -19,7 +19,7 @@ package quasar
 import quasar.Predef._
 import quasar.javascript.Js
 import quasar.fp._
-import quasar.recursionschemes._, Recursive.ops._
+import quasar.recursionschemes._, Recursive.ops._, FunctorT.ops._
 
 import scalaz._, Scalaz._
 
@@ -169,7 +169,7 @@ package object jscore {
           Ident(tmp).toJs)
     }
 
-    val simplify = expr.cata(repeatedly(simplifyƒ))
+    val simplify = expr.transform(repeatedly(simplifyƒ))
 
     def substitute(oldExpr: JsCore, newExpr: JsCore): JsCore = {
       def loop(x: JsCore, inScope: Set[JsCore]): JsCore =

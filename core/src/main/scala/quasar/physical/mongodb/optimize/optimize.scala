@@ -18,7 +18,7 @@ package quasar.physical.mongodb
 
 import quasar.Predef._
 import quasar.jscore._
-import quasar.recursionschemes._, Recursive.ops._
+import quasar.recursionschemes._, Recursive.ops._, FunctorT.ops._
 import quasar.fp._
 
 import scalaz._, Scalaz._
@@ -141,7 +141,7 @@ package object optimize {
     }
 
     def reorderOps(wf: Workflow): Workflow = {
-      val reordered = wf.cata(simply(reorderOpsƒ))
+      val reordered = wf.transform(simply(reorderOpsƒ))
       if (reordered == wf) wf else reorderOps(reordered)
     }
 
@@ -241,7 +241,6 @@ package object optimize {
         val by = g.by.fold(
           inlineProject0(_, rs).left.some,
           fixExpr(rs, _).map(\/-(_)))
-
         (grouped |@| by)((grouped, by) => (src, Grouped(grouped), by))
       }
     }
