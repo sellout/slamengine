@@ -119,16 +119,17 @@ trait RelationsLib extends Library {
   val And = Mapping("(AND)", "Performs a logical AND of two boolean values",
     Type.Bool, Type.Bool :: Type.Bool :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(l, r) => l.project match {
-          case ConstantF(Data.True) => r.some
-          case _                    => r.project match {
-            case ConstantF(Data.True) => l.some
-            case _                    => None
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(_, List(l, r)) => l.project match {
+            case ConstantF(Data.True) => r.project.some
+            case _                    => r.project match {
+              case ConstantF(Data.True) => l.project.some
+              case _                    => None
+            }
           }
+          case _ => None
         }
-        case _ => None
-      }
     },
     partialTyper {
       case Type.Const(Data.Bool(v1)) :: Type.Const(Data.Bool(v2)) :: Nil => Type.Const(Data.Bool(v1 && v2))
@@ -143,16 +144,17 @@ trait RelationsLib extends Library {
   val Or = Mapping("(OR)", "Performs a logical OR of two boolean values",
     Type.Bool, Type.Bool :: Type.Bool :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(l, r) => l.project match {
-          case ConstantF(Data.False) => r.some
-          case _                    => r.project match {
-            case ConstantF(Data.False) => l.some
-            case _                     => None
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(_, List(l, r)) => l.project match {
+            case ConstantF(Data.False) => r.project.some
+            case _                    => r.project match {
+              case ConstantF(Data.False) => l.project.some
+              case _                     => None
+            }
           }
+          case _ => None
         }
-        case _ => None
-      }
     },
     partialTyper {
       case Type.Const(Data.Bool(v1)) :: Type.Const(Data.Bool(v2)) :: Nil => Type.Const(Data.Bool(v1 || v2))
@@ -176,14 +178,15 @@ trait RelationsLib extends Library {
   val Cond = Mapping("(IF_THEN_ELSE)", "Chooses between one of two cases based on the value of a boolean expression",
     Type.Bottom, Type.Bool :: Type.Top :: Type.Top :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(t, c, a) => t.project match {
-          case ConstantF(Data.True)  => c.some
-          case ConstantF(Data.False) => a.some
-          case _                     => None
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(_, List(t, c, a)) => t.project match {
+            case ConstantF(Data.True)  => c.project.some
+            case ConstantF(Data.False) => a.project.some
+            case _                     => None
+          }
+          case _ => None
         }
-        case _ => None
-      }
     },
     partialTyper {
       case Type.Const(Data.Bool(true)) :: ifTrue :: ifFalse :: Nil => ifTrue
@@ -197,16 +200,17 @@ trait RelationsLib extends Library {
     "Returns the first of its arguments that isn't null.",
     Type.Bottom, Type.Top :: Type.Top :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(first, second) => first.project match {
-          case ConstantF(Data.Null) => second.some
-          case _                    => second.project match {
-            case ConstantF(Data.Null) => first.some
-            case _                    => None
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(_, List(first, second)) => first.project match {
+            case ConstantF(Data.Null) => second.project.some
+            case _                    => second.project match {
+              case ConstantF(Data.Null) => first.project.some
+              case _                    => None
+            }
           }
+          case _ => None
         }
-        case _ => None
-      }
     },
     partialTyper {
       case Type.Null             :: v2 :: Nil => v2

@@ -44,13 +44,13 @@ object Optimizer {
     }
 
   def simplifyƒ[T[_[_]]: Recursive: FunctorT]:
-      LogicalPlan[T[LogicalPlan]] => Option[T[LogicalPlan]] = {
-    case InvokeF(func, args) => func.simplify(args)
+      LogicalPlan[T[LogicalPlan]] => Option[LogicalPlan[T[LogicalPlan]]] = {
+    case inv @ InvokeF(func, _) => func.simplify(inv)
     case LetF(ident, form, in) => form.project match {
-      case ConstantF(_) => in.transPara(inlineƒ(ident, form.project)).some
+      case ConstantF(_) => in.transPara(inlineƒ(ident, form.project)).project.some
       case _ => in.cata(countUsageƒ(ident)) match {
-        case 0 => in.some
-        case 1 => in.transPara(inlineƒ(ident, form.project)).some
+        case 0 => in.project.some
+        case 1 => in.transPara(inlineƒ(ident, form.project)).project.some
         case _ => None
       }
     }
@@ -127,7 +127,7 @@ object Optimizer {
   }
 
   def preferProjections(t: Fix[LogicalPlan]): Fix[LogicalPlan] =
-    boundPara(t)(preferProjectionsƒ)._1.transform(repeatedly(simplifyƒ))
+    boundPara(t)(preferProjectionsƒ)._1.transCata(repeatedly(simplifyƒ))
 
   val elideTypeCheckƒ: LogicalPlan[Fix[LogicalPlan]] => Fix[LogicalPlan] = {
     case LetF(n, b, Fix(TypecheckF(Fix(FreeF(nf)), _, cont, _)))

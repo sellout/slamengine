@@ -97,7 +97,7 @@ class WorkflowBuilderSpec
         city   <- lift(projectField(read, "city"))
         array  <- arrayConcat(makeArray(city), pureArr)
         state2 <- lift(projectIndex(array, 2))
-      } yield state2.transform(normalize)).evalZero
+      } yield state2.transCata(normalize)).evalZero
 
       op must beRightDisjunction(ExprBuilder(read, $literal(Bson.Int32(1)).right))
     }
@@ -447,14 +447,14 @@ class WorkflowBuilderSpec
       val readFoo = CollectionBuilder($read(Collection("db", "foo")), Root(), None)
 
       "collapse simple reference to JS" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
               BsonField.Name("__tmp") -> -\/(jscore.JsFn(jscore.Name("x"), jscore.Literal(Js.Bool(true)))))),
           ListMap(
             BsonField.Name("0") -> \/-($var(DocField(BsonField.Name("__tmp"))))))
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("0") -> -\/(jscore.JsFn(jscore.Name("y"), jscore.Literal(Js.Bool(true))))))
@@ -463,14 +463,14 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference in ExprOp" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
               BsonField.Name("__tmp") -> \/-($var(DocField(BsonField.Name("foo")))))),
           ListMap(
             BsonField.Name("0") -> \/-($toLower($var(DocField(BsonField.Name("__tmp")))))))
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("0") -> \/-($toLower($var(DocField(BsonField.Name("foo")))))))
@@ -479,14 +479,14 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference to JS in ExprOp" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
               BsonField.Name("__tmp") -> -\/(jscore.JsFn(jscore.Name("x"), jscore.Literal(Js.Str("ABC")))))),
           ListMap(
             BsonField.Name("0") -> \/-($toLower($var(DocField(BsonField.Name("__tmp")))))))
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("0") -> -\/(jscore.JsFn(jscore.Name("x"),
@@ -498,14 +498,14 @@ class WorkflowBuilderSpec
       }
 
       "collapse reference through $$ROOT" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
               BsonField.Name("__tmp") -> \/-($$ROOT))),
           ListMap(
             BsonField.Name("foo") -> \/-($var(DocField(BsonField.Name("__tmp") \ BsonField.Name("foo"))))))
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("foo") -> \/-($var(DocField(BsonField.Name("foo"))))))
@@ -514,7 +514,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse JS reference" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
@@ -523,7 +523,7 @@ class WorkflowBuilderSpec
             BsonField.Name("0") -> -\/(jscore.JsFn(jscore.Name("x"),
               jscore.Select(jscore.Select(jscore.ident("x"), "__tmp"), "length")))))
 
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("0") -> -\/(jscore.JsFn(jscore.Name("y"),
@@ -533,7 +533,7 @@ class WorkflowBuilderSpec
       }
 
       "collapse expression that contains a projection" in {
-        val w = DocBuilder(
+        val w = DocBuilderF(
           DocBuilder(
             readFoo,
             ListMap(
@@ -543,7 +543,7 @@ class WorkflowBuilderSpec
             BsonField.Name("__tmp3") -> -\/(jscore.JsFn(jscore.Name("x"),
               jscore.Arr(List(jscore.Select(jscore.ident("x"), "__tmp0")))))))
 
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("__tmp3") -> -\/(jscore.JsFn(jscore.Name("x"),
@@ -556,7 +556,7 @@ class WorkflowBuilderSpec
 
       "collapse this" in {
         val w =
-          DocBuilder(
+          DocBuilderF(
             DocBuilder(
               DocBuilder(
                 readFoo,
@@ -572,7 +572,7 @@ class WorkflowBuilderSpec
               BsonField.Name("__tmp8") -> \/-($field("__tmp7", "city")),
               BsonField.Name("__tmp9") -> \/-($field("__tmp6"))))
 
-        val exp = DocBuilder(
+        val exp = DocBuilderF(
           readFoo,
           ListMap(
             BsonField.Name("__tmp8") -> \/-($field("city")),

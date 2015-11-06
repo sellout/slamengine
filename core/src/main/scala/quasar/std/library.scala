@@ -27,14 +27,9 @@ import Validation.{success, failure}
 
 trait Library {
   protected val noSimplification: Func.Simplifier = new Func.Simplifier {
-    def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = None
+    def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+      None
   }
-
-  // protected def partialSimplifier(
-  //   f: PartialFunction[List[T[LogicalPlan]], T[LogicalPlan]]):
-  //     Func.Simplifier = new Func.Simplifier {
-  //   def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = f.lift(args)
-  // }
 
   protected def constTyper(codomain: Type): Func.Typer = { args =>
     Validation.success(codomain)

@@ -53,9 +53,9 @@ trait SetLib extends Library {
   val Drop = Sifting("(OFFSET)", "Drops the first N elements from a set",
     Type.Top, Type.Top :: Type.Int :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(set, count) => count.project match {
-          case ConstantF(Data.Int(n)) if n == 0 => set.some
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) = orig match {
+        case InvokeF(_, List(set, count)) => count.project match {
+          case ConstantF(Data.Int(n)) if n == 0 => set.project.some
           case _ => None
         }
         case _ => None
@@ -76,13 +76,14 @@ trait SetLib extends Library {
   val Filter = Sifting("WHERE", "Filters a set to include only elements where a projection is true",
     Type.Top, Type.Top :: Type.Bool :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(set, cond) => cond.project match {
-          case ConstantF(Data.True) => set.some
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(_, List(set, cond)) => cond.project match {
+            case ConstantF(Data.True) => set.project.some
+            case _ => None
+          }
           case _ => None
         }
-        case _ => None
-      }
     },
     setTyper(partialTyper {
       case _   :: Type.Const(Data.False) :: Nil => Type.Const(Data.Set(Nil))

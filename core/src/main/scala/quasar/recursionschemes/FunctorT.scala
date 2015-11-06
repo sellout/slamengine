@@ -17,11 +17,13 @@
 package quasar.recursionschemes
 
 import quasar.Predef._
+import quasar.fp._
 
 import scalaz._, Scalaz._
 import simulacrum.{typeclass, op}
 
 @typeclass trait FunctorT[T[_[_]]] {
+  // NB: this could perhaps also be called `transCata`
   @op("∘") def map[F[_], G[_]](t: T[F])(f: F[T[F]] => G[T[G]]): T[G]
 
   def transform[F[_]: Functor](t: T[F])(f: T[F] => T[F]): T[F] =
@@ -36,8 +38,19 @@ import simulacrum.{typeclass, op}
     map(tf)(_.map(topDownCata(_, a0)(f)))
   }
 
-  def transPara[F[_]: Functor](t: T[F])(f: F[(T[F], T[F])] => F[T[F]]): T[F] =
+  def transCata[F[_]: Functor, G[_]](t: T[F])(f: F[T[G]] => G[T[G]]): T[G] =
+    map(t)(ft => f(ft.map(transCata(_)(f))))
+
+  def transAna[F[_], G[_]: Functor](t: T[F])(f: F[T[F]] => G[T[F]]): T[G] =
+    map(t)(ft => f(ft).map(transAna(_)(f)))
+
+  def transPara[F[_]: Functor, G[_]](t: T[F])(f: F[(T[F], T[G])] => G[T[G]]):
+      T[G] =
     map(t)(ft => f(ft.map(tf => (tf, transPara(tf)(f)))))
+
+  def transApo[F[_], G[_]: Functor](t: T[F])(f: F[T[F]] => G[T[G] \/ T[F]]):
+      T[G] =
+    map(t)(ft => f(ft).map(_.fold(ι, transApo(_)(f))))
 
   def trans[F[_], G[_]: Functor](t: T[F])(f: F ~> G): T[G] =
     map(t)(f(_).map(trans(_)(f)))

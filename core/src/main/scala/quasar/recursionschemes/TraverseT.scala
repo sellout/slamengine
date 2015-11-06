@@ -37,5 +37,9 @@ import simulacrum.typeclass
     f: (A, T[F]) => M[(A, T[F])]):
       M[T[F]] =
     f(a, t).flatMap { case (a, tf) =>
-      traverse(tf)(_.traverse(topDownCataM(_, a)(f))) }
+      traverse(tf)(_.traverse(topDownCataM(_, a)(f)))
+    }
+
+  def transCataM[M[_]: Monad, F[_]: Traverse, G[_]](t: T[F])(f: F[T[G]] => M[G[T[G]]]): M[T[G]] =
+    traverse(t)(_.traverse(transCataM(_)(f)).flatMap(f))
 }

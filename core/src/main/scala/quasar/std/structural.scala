@@ -158,9 +158,10 @@ trait StructuralLib extends Library {
     "({})",
     "Extracts a specified field of an object",
     Top, AnyObject :: Str :: Nil,
-    new Func.Simplifier { // TODO: actually use partialSimplifier here?
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(MakeObjectN(obj), field) => obj.toListMap.get(field)
+    new Func.Simplifier {
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) = orig match {
+        case InvokeF(_, List(MakeObjectN(obj), field)) =>
+          obj.toListMap.get(field).map(_.project)
         case _ => None
       }
     },

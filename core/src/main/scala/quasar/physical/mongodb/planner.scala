@@ -1096,11 +1096,11 @@ object MongoDbPlanner extends Planner[Crystallized] with Conversions {
     def liftError[A](ea: PlannerError \/ A): M[A] =
       swizzle(stateT[PlannerError \/ ?, NameGen, A](ea))
 
-    val wfƒ = workflowƒ andThen (_.map(_.map(normalize)))
+    val wfƒ = workflowƒ ⋙ (_ ∘ (_ ∘ (_ ∘ normalize)))
 
     (for {
       cleaned <- log("Logical Plan (reduced typechecks)")(liftError(logical.cataM[PlannerError \/ ?, Fix[LogicalPlan]](Optimizer.assumeReadObjƒ)))
-      align <- log("Logical Plan (aligned joins)")       (liftError(Corecursive[Fix].apo[LogicalPlan, Fix[LogicalPlan]](cleaned)(elideJoinCheckƒ).transformM(alignJoinsƒ <<< Recursive[Fix].project <<< repeatedly(Optimizer.simplifyƒ))))
+      align <- log("Logical Plan (aligned joins)")       (liftError(Corecursive[Fix].apo(cleaned)(elideJoinCheckƒ).cataM(alignJoinsƒ ⋘ repeatedly(Optimizer.simplifyƒ))))
       prep <- log("Logical Plan (projections preferred)")(Optimizer.preferProjections(align).point[M])
       wb   <- log("Workflow Builder")                    (swizzle(swapM(lpParaZygoHistoS(prep)(annotateƒ, wfƒ))))
       wf1  <- log("Workflow (raw)")                      (swizzle(build(wb)))

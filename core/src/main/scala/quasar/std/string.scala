@@ -18,8 +18,8 @@ package quasar.std
 
 import quasar.Predef._
 import quasar.{Data, Func, LogicalPlan, Type, Mapping, SemanticError}, LogicalPlan._, SemanticError._
-
-import quasar.recursionschemes._, Recursive.ops._
+import quasar.fp._
+import quasar.recursionschemes._, Recursive.ops._, FunctorT.ops._
 
 import scalaz._, Scalaz._, NonEmptyList.nel, Validation.{success, failure}
 
@@ -37,16 +37,17 @@ trait StringLib extends Library {
   val Concat = Mapping("concat", "Concatenates two (or more) string values",
     Type.Str, Type.Str :: Type.Str :: Nil,
     new Func.Simplifier {
-      def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-        case List(first, second) => first.project match {
-          case ConstantF(Data.Str("")) => second.some
-          case _ => second.project match {
-            case ConstantF(Data.Str("")) => first.some
-            case _ => None
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(f, List(first, second)) => first.project match {
+            case ConstantF(Data.Str("")) => second.project.some
+            case _ => second.project match {
+              case ConstantF(Data.Str("")) => first.project.some
+              case _ => None
+            }
           }
+          case _ => None
         }
-        case _ => None
-      }
     },
     stringApply(_ + _),
     basicUntyper)
@@ -119,20 +120,20 @@ trait StringLib extends Library {
     "substring",
     "Extracts a portion of the string",
     Type.Str, Type.Str :: Type.Int :: Type.Int :: Nil,
-    // new Func.Simplifier {
-    //   def apply[T[_[_]]: Recursive](args: List[T[LogicalPlan]]) = args match {
-    //     case List(str0, from0, for0) => (str.project, from.project) match {
-    //       case (ConstantF(Data.Str(str)), ConstantF(Data.Int(from))) if 0 < from =>
-    //         Substring(
-    //           str0.map(κ(ConstantF(Data.Str(str.substring(from.intValue))))),
-    //           from0.map(κ(ConstantF(Data.Int(0)))),
-    //           for0)
-    //       case _ => None
-    //     }
-    //     case _ => None
-    //   }
-    // }
-    noSimplification,
+    new Func.Simplifier {
+      def apply[T[_[_]]: Recursive: FunctorT](orig: LogicalPlan[T[LogicalPlan]]) =
+        orig match {
+          case InvokeF(f, List(str0, from0, for0)) => (str0.project, from0.project) match {
+            case (ConstantF(Data.Str(str)), ConstantF(Data.Int(from))) if 0 < from =>
+              InvokeF(f, List(
+                str0 ∘ κ(ConstantF[T[LogicalPlan]](Data.Str(str.substring(from.intValue)))),
+                from0 ∘ κ(ConstantF[T[LogicalPlan]](Data.Int(0))),
+                for0)).some
+            case _ => None
+          }
+          case _ => None
+        }
+    },
     partialTyperV {
       case List(
         Type.Const(Data.Str(str)),
