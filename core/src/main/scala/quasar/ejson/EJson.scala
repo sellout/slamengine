@@ -17,6 +17,7 @@
 package quasar.ejson
 
 import quasar.Predef._
+import quasar.fp._
 
 import org.threeten.bp.{Instant, LocalDate, LocalTime, Duration}
 import scalaz._, Scalaz._
@@ -62,10 +63,6 @@ object EJson {
         case Interval(value)  => G.point(Interval(value))
         case Binary(value)    => G.point(Binary(value))
       }
-  }
-
-  sealed trait ∘[F[_], G[_]] {
-    type λ[A] = F[G[A]]
   }
 
   // TODO: This misbehaves on Int/Dec

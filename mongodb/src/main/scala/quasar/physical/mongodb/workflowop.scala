@@ -897,6 +897,11 @@ object Workflow {
         List(Js.Return(Js.AnonElem(List(key, value)))))
     def mapMap(ident: String, transform: Js.Expr) =
       mapKeyVal(("key", ident), Js.Ident("key"), transform)
+    val mapFresh =
+      mapKeyVal(("key", "value"), Js.Call(Js.Ident("ObjectId"), Nil), Js.Ident("value"))
+    val mapValKey =
+      mapKeyVal(("key", "value"), Js.Ident("value"), Js.Ident("value"))
+
     val mapNOP = mapMap("value", Js.Ident("value"))
 
     def finalizerFn(fn: Js.Expr) =

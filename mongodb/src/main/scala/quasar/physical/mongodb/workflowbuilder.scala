@@ -1429,6 +1429,30 @@ object WorkflowBuilder {
       wf => checkTask(task(crystallize(wf._1))))
   }
 
+  def unionAll(left: WorkflowBuilder, right: WorkflowBuilder): M[WorkflowBuilder] =
+    (workflow(left) |@| workflow(right)) { case ((l, _), (r, _)) =>
+      CollectionBuilder(
+        $foldLeft(
+          l,
+          chain(r,
+            $map($Map.mapFresh, ListMap()),
+            $reduce($Reduce.reduceNOP, ListMap()))),
+        Root(),
+        None)
+    }
+
+  def union(left: WorkflowBuilder, right: WorkflowBuilder): M[WorkflowBuilder] =
+    (workflow(left) |@| workflow(right)) { case ((l, _), (r, _)) =>
+      CollectionBuilder(
+        $foldLeft(
+          chain(l, $map($Map.mapValKey, ListMap())),
+          chain(r,
+            $map($Map.mapValKey, ListMap()),
+            $reduce($Reduce.reduceNOP, ListMap()))),
+        Root(),
+        None)
+    }
+
   def join(left0: WorkflowBuilder, right0: WorkflowBuilder,
     tpe: Func,
     leftKey0: List[WorkflowBuilder], leftJs0: Option[List[JsFn]],

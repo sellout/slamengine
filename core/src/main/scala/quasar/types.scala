@@ -289,6 +289,11 @@ object Type extends TypeInstances {
     case _                        => Top
   }
 
+  def matchTypes[A](typ: Type)(cases: (Type, A)*): Option[A] =
+    cases.foldLeft[Option[A]](None) { case (acc, (t, a)) =>
+      acc.orElse(typecheck(t, typ).toOption ∘ κ(a))
+    }
+
   def typecheck(superType: Type, subType: Type):
       ValidationNel[TypeError, Unit] =
     (superType, subType) match {
