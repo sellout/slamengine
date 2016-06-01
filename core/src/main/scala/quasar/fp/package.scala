@@ -499,4 +499,22 @@ package object fp
   }
 
   type ∘[F[_], G[_]] = Composition[F, G]
+
+  /** Coproduct */
+  trait :+:[F[_], G[_]] {
+    type λ[A] = Coproduct[F, G, A]
+  }
+
+  implicit def freeEqual[F[_]: Functor](
+  implicit F: Equal ~> λ[α => Equal[F[α]]]):
+    Equal ~> λ[α => Equal[Free[F, α]]] =
+  new (Equal ~> λ[α => Equal[Free[F, α]]]) {
+    def apply[α](eq: Equal[α]) =
+      Equal.equal((a, b) => (a.resume, b.resume) match {
+        case (-\/(f1), -\/(f2)) =>
+          F(freeEqual[F](scala.Predef.implicitly, F)(eq)).equal(f1, f2)
+        case (\/-(a1), \/-(a2)) => eq.equal(a1, a2)
+        case (_,       _)       => false
+      })
+  }
 }

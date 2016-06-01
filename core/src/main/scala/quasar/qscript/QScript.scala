@@ -16,10 +16,13 @@
 
 package quasar.qscript
 
+import quasar._
+import quasar.fp._
 import quasar.Predef._
 
+import matryoshka._, Recursive.ops._, FunctorT.ops._
 import pathy.Path._
-import scalaz._
+import scalaz._, Scalaz._
 
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -30,27 +33,76 @@ import scalaz._
 // - in `Pathable`, the only `MapFunc` node allowed is a `ProjectField`
 
 // TODO use real EJson when it lands in master
-trait EJson[A]
+sealed trait EJson[A]
+object EJson {
+  def toEJson[T[_[_]]](data: Data): T[EJson] = ???
+  final case class Null[A]() extends EJson[A]
+  
+  implicit def equal: Equal ~> (Equal ∘ EJson)#λ = new (Equal ~> (Equal ∘ EJson)#λ) {
+    def apply[A](in: Equal[A]): Equal[EJson[A]] = Equal.equal {
+      case _ => true
+    }
+  }
 
-sealed trait QScript[T[_[_]], A]
+  implicit def functor: Functor[EJson] = new Functor[EJson] {
+    def map[A, B](fa: EJson[A])(f: A => B): EJson[B] = Null[B]()
+  }
+}
 
 object DataLevelOps {
   sealed trait MapFunc[T[_[_]], A]
-  final case class MapFunc0[T[_[_]], A](value: T[EJson]) extends MapFunc[T, A]
-  final case class MapFunc1[T[_[_]], A](a1: A) extends MapFunc[T, A]
-  final case class MapFunc2[T[_[_]], A](a1: A, a2: A) extends MapFunc[T, A]
-  final case class MapFunc3[T[_[_]], A](a1: A, a2: A, a3: A) extends MapFunc[T, A]
+  final case class Nullary[T[_[_]], A](value: T[EJson]) extends MapFunc[T, A]
+  final case class Unary[T[_[_]], A](a1: A) extends MapFunc[T, A]
+  final case class Binary[T[_[_]], A](a1: A, a2: A) extends MapFunc[T, A]
+  final case class Ternary[T[_[_]], A](a1: A, a2: A, a3: A) extends MapFunc[T, A]
+
+  object MapFunc {
+    implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ MapFunc[T, ?])#λ = new (Equal ~> (Equal ∘ MapFunc[T, ?])#λ) {
+      def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
+        case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
+        case (Unary(a1), Unary(a2)) => in.equal(a1, a2)
+        case (Binary(a11, a12), Binary(a21, a22)) => in.equal(a11, a21) && in.equal(a12, a22)
+        case (Ternary(a11, a12, a13), Ternary(a21, a22, a23)) => in.equal(a11, a21) && in.equal(a12, a22) && in.equal(a13, a23)
+        case (_, _) => false
+      }
+    }
+
+    implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
+      def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
+        fa match {
+          case Nullary(v) => Nullary[T, B](v)
+          case Unary(a1) => Unary(f(a1))
+          case Binary(a1, a2) => Binary(f(a1), f(a2))
+          case Ternary(a1, a2, a3) => Ternary(f(a1), f(a2), f(a3))
+        }
+    }
+  }
 
   type FreeMap[T[_[_]]] = Free[MapFunc[T, ?], Unit]
+
+  implicit def NTEqual[F[_], A](implicit A: Equal[A], F: Equal ~> λ[α => Equal[F[α]]]):
+    Equal[F[A]] =
+  F(A)
+
+
+  // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
+  implicit def FreeMapEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[FreeMap[T]] =
+    freeEqual[MapFunc[T, ?]].apply(Equal[Unit])
 
   sealed trait ReduceFunc
 
   sealed trait JoinSide
   final case object LeftSide extends JoinSide
   final case object RightSide extends JoinSide
+
+  object JoinSide {
+    implicit val equal: Equal[JoinSide] = Equal.equalRef
+  }
   
   type JoinFunc[T[_[_]]] = Free[MapFunc[T, ?], JoinSide]
   type JoinBranch[T[_[_]]] = Free[QScript[T, ?], Unit]
+
+  def UnitF[T[_[_]]] = Free.point[MapFunc[T, ?], Unit](())
 }
 
 import DataLevelOps._
@@ -60,7 +112,12 @@ object ReduceFuncs {
 }
 
 object MapFuncs {
-  def ObjectProject[T[_[_]], A](a1: A, a2: A) = MapFunc2(a1, a2)
+  def ObjectProject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def ObjectConcat[T[_[_]], A](a1: A, a2: A) = Binary(a1, a2)
+  def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary(a1, a2)
+
+  // TODO not what we want
+  def liftOP[T[_[_]]]: FreeMap[T] = Free.liftF(ObjectProject[T, Unit]((), ()))
 }
 
 sealed trait SortDir
@@ -81,7 +138,41 @@ object JoinType {
   implicit val equal: Equal[JoinType] = Equal.equalRef
 }
 
-sealed trait Pathable[T[_[_]], A] extends QScript[T, A]
+sealed trait Pathable[T[_[_]], A]
+
+
+object Pathable {
+  //scala.Predef.implicitly[Equal[MapFunc[Fix, Unit]]]
+  //scala.Predef.implicitly[FreeMap[Fix]]
+
+  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ Pathable[T, ?])#λ =
+    new (Equal ~> (Equal ∘ Pathable[T, ?])#λ) {
+      def apply[A](eq: Equal[A]) =
+        Equal.equal {
+          case (Root(), Root()) => true
+          case (Map(a1, f1), Map(a2, f2)) => f1 ≟ f2 && eq.equal(a1, a2)
+          case (LeftShift(a1), LeftShift(a2)) => eq.equal(a1, a2)
+          case (Union(a1, l1, r1), Union(a2, l2, r2)) =>
+            eq.equal(a1, a2) && l1 ≟ l2 && r1 ≟ r2
+          case (_, _) => false
+        }
+    }
+
+  implicit def traverse[T[_[_]]]: Traverse[Pathable[T, ?]] =
+    new Traverse[Pathable[T, ?]] {
+      def traverseImpl[G[_], A, B](
+        fa: Pathable[T, A])(
+        f: A => G[B])(
+        implicit G: Applicative[G]):
+          G[Pathable[T, B]] =
+        fa match {
+          case Root()         => G.point(Root())
+          case Map(a, func)   => f(a) ∘ (Map[T, B](_, func))  // TODO Functor for MapFunc
+          case LeftShift(a)   => f(a) ∘ (LeftShift(_))
+          case Union(a, l, r) => f(a) ∘ (Union(_, l, r))
+        }
+    }
+}
 
 /** The top level of a filesystem. During compilation this represents `/`, but
   * in the structure a backend sees, it represents the mount point.
@@ -110,7 +201,34 @@ final case class Union[T[_[_]], A](
   rBranch: JoinBranch[T])
     extends Pathable[T, A]
 
-sealed trait QScriptCore[T[_[_]], A] extends QScript[T, A]
+sealed trait QScriptCore[T[_[_]], A]
+
+object QScriptCore {
+  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ QScriptCore[T, ?])#λ =
+    new (Equal ~> (Equal ∘ QScriptCore[T, ?])#λ) {
+      def apply[A](eq: Equal[A]) =
+        Equal.equal {
+          case (Reduce(a1, b1, f1), Reduce(a2, b2, f2)) =>
+            b1 ≟ b2 && f1 ≟ f2 && eq.equal(a1, a2)
+          case (Sort(a1, b1, o1), Sort(a2, b2, o2)) =>
+            b1 ≟ b2 && o1 ≟ o2 && eq.equal(a1, a2)
+          case (Filter(a1, f1), Filter(a2, f2)) => f1 ≟ f2 && eq.equal(a1, a2)
+          case (_, _) => false
+        }
+    }
+
+  implicit def traverse[T[_[_]]]: Traverse[QScriptCore[T, ?]] =
+    new Traverse[QScriptCore[T, ?]] {
+      def traverseImpl[G[_]: Applicative, A, B](
+        fa: QScriptCore[T, A])(
+        f: A => G[B]) =
+        fa match {
+          case Reduce(a, b, func) => f(a) ∘ (Reduce(_, b, func))
+          case Sort(a, b, o)      => f(a) ∘ (Sort(_, b, o))
+          case Filter(a, func)    => f(a) ∘ (Filter(_, func))
+        }
+    }
+}
 
 /** Performs a reduction over a dataset, with the dataset partitioned by the
   * result of the MapFunc. So, rather than many-to-one, this is many-to-fewer.
@@ -140,6 +258,22 @@ final case class Filter[T[_[_]], A](src: A, f: FreeMap[T])
 /** A backend-resolved `Root`, which is now a path. */
 final case class Read[A](src: A, path: AbsFile[Sandboxed])
 
+object Read {
+  implicit def equal[T[_[_]]]: Equal ~> (Equal ∘ Read)#λ =
+    new (Equal ~> (Equal ∘ Read)#λ) {
+      def apply[A](eq: Equal[A]) =
+        Equal.equal {
+          case (Read(a1, p1), Read(a2, p2)) => eq.equal(a1, a2) && p1 ≟ p2
+        }
+    }
+
+  implicit def traverse[T[_[_]]]: Traverse[Read] =
+    new Traverse[Read] {
+      def traverseImpl[G[_]: Applicative, A, B](fa: Read[A])(f: A => G[B]) =
+        f(fa.src) ∘ (Read(_, fa.path))
+    }
+}
+
 /** Applies a function across two datasets, in the cases where the JoinFunc
   * evaluates to true. The branches represent the divergent operations applied
   * to some common src. Each branch references the src exactly once. (Since no
@@ -156,4 +290,121 @@ final case class ThetaJoin[T[_[_]], A](
   f: JoinType,
   src: A,
   lBranch: JoinBranch[T],
-  rBranch: JoinBranch[T]) extends QScript[T, A]
+  rBranch: JoinBranch[T])
+
+object ThetaJoin {
+  implicit def equal[T[_[_]]]: Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ =
+    new (Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ) {
+      def apply[A](eq: Equal[A]) =
+        Equal.equal {
+          case (ThetaJoin(a1, o1, f1, l1, r1), ThetaJoin(a2, o2, f2, l2, r2)) =>
+            eq.equal(a1, a2) && o1 ≟ o2 && f1 ≟ f2 && l1 ≟ l2 && r1 ≟ r2
+        }
+    }
+
+  implicit def traverse[T[_[_]]]: Traverse[ThetaJoin[T, ?]] =
+    new Traverse[ThetaJoin[T, ?]] {
+      def traverseImpl[G[_]: Applicative, A, B](
+        fa: ThetaJoin[T, A])(
+        f: A => G[B]) =
+        f(fa.src) ∘ (ThetaJoin(_, fa.on, fa.f, fa.lBranch, fa.rBranch))
+    }
+}
+
+// TODO should be a ThetaJoin
+final case class Cross[T[_[_]], A](
+  src: A,
+  left: (String, JoinBranch[T]),
+  right: (String, JoinBranch[T]))
+
+object Transform {
+  import MapFuncs._
+
+  type Inner[T[_[_]]] = T[QScript[T, ?]]
+  type QSAlgebra[T[_[_]]] = LogicalPlan[Inner[T]] => QScript[T, Inner[T]]
+
+  def toQscript[T[_[_]]: FunctorT, A](lp: T[LogicalPlan])(f: QSAlgebra[T]): T[QScript[T, ?]] =
+    lp.transCata(f)
+
+  final case class Merge[T[_[_]], A](
+    namel: Option[String],
+    namer: Option[String],
+    merge: QScript[T, A])
+
+  def mergeSrcs[T[_[_]], A](
+      left: QScript[T, A],
+      right: QScript[T, A]): Merge[T, A] =
+
+    (left, right) match {
+      case (l, r) if l == r => Merge(None, None, l)
+
+      case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
+        Merge(
+          Some("tmp1"),
+          Some("tmp2"),
+          Map(src1, ObjectConcat(MakeObject("tmp1", m1), MakeObject("tmp2", m2))))
+
+      case (Reduce(src1, m1, r1), Map(src2, m2)) if src1 == src2 =>
+        Merge(
+          Some("tmp1"),
+          Some("tmp2"),
+          Cross(src1, ("tmp1", Reduce(UnitF, m1, r1)), ("tmp2", Map(UnitF, m2))))
+
+      // TODO handle other cases (recursive and not)
+      case _ => ???
+    }
+
+  def algebra[T[_[_]]: Corecursive](lp: LogicalPlan[Inner[T]]): QScript[T, Inner[T]] =
+    lp match {
+      case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
+      case LogicalPlan.ConstantF(data) => Map(Root[T, Inner[T]]().embed, Nullary(EJson.toEJson(data).embed))
+      //case LogicalPlan.FreeF(name) => Map(ObjectProjectFree(name, ()), Null().embed)
+
+      //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping1(func, input)
+      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping2(func, input)
+      //case LogicalPlan.InvokeF(func @ TernaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping3(func, input)
+
+      //// TODO bucketing handled by GroupBy
+      //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Reduction => invokeReduction1(func, input)
+
+      //// special case Sort (is Sort a Transformation?)
+      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Sifting => invokeSifting2(func, input)
+      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Expansion => invokeLeftShift(func, input)
+
+      //// handling bucketing for sorting
+      //// e.g. squashing before a reduce puts everything in the same bucket
+      //// TODO consider removing Squashing entirely - and using GroupBy exclusively
+      //// Reduce(Sort(LeftShift(GroupBy)))  (LP)
+      //// Reduce(Add(GB, GB))
+      //// LeftShift and Projection can change grouping/bucketing metadata
+      //// y := select sum(pop) (((from zips) group by state) group by substring(city, 0, 2))
+      //// z := select sum(pop) from zips group by city
+      //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Squashing => ??? // returning the source with added metadata - mutiple buckets
+
+      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) => {
+      //  func match {
+      //    case GroupBy => ??? // returning the source with added metadata - mutiple buckets
+      //    case UnionAll => ??? //UnionAll(...)
+      //    // input(0) ~ (name, thing)
+      //    case IntersectAll => ObjProj(left, ThetaJoin(Eq, Inner, Root(), input(0), input(1)))  // inner join where left = right, combine func = left (whatever)
+      //    case Except => ObjProj(left, ThetaJoin(False, LeftOuter, Root(), input(0), input(1)))
+      //  }
+      //}
+      //case LogicalPlan.InvokeF(func @ TernaryFunc, input) => {
+      //  func match {
+      //    // src is Root() - and we rewrite lBranch/rBranch so that () refers to Root()
+      //    case InnerJoin => ThetaJoin(input(2), Inner, Root(), input(0), input(1)) // TODO use input(2)
+      //    case LeftOuterJoin => ThetaJoin(input(2), LeftOuter, Root(), input(0), input(1)) // TODO use input(2)
+      //    case RightOuterJoin => ???
+      //    case FullOuterJoin => ???
+      //  }
+      //}
+
+      //// Map(src=form, MakeObject(name, ()))
+      //// Map(Map(src=form, MakeObject(name, ())), body)
+      //case LogicalPlan.LetF(name, form, body) => rewriteLet(body)(qsRewrite(name, form))
+
+      //case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
+      //  Map(PatternGuard(expr, typ cont fallback), Root().embed)
+    }
+}
