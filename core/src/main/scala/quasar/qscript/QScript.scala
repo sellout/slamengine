@@ -48,3 +48,13 @@ object DataLevelOperations {
   type JoinFunc[T[_[_]]] = Free[MapFunc[T, ?], JoinSide]
   type FreeMap[T[_[_]]] = Free[MapFunc[T, ?], Unit]
 }
+
+import DataLevelOperations._
+
+object ReduceFuncs {
+  final case object Sum extends ReduceFunc
+}
+
+object MapFuncs {
+  def ObjectProject[T[_[_]], A](a1: A, a2: A) = MapFunc2(a1, a2)
+}
