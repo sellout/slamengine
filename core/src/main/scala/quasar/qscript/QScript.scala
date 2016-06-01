@@ -80,14 +80,18 @@ object DataLevelOps {
 
   type FreeMap[T[_[_]]] = Free[MapFunc[T, ?], Unit]
 
+  // TODO this should be found from matryoshka
   implicit def NTEqual[F[_], A](implicit A: Equal[A], F: Equal ~> λ[α => Equal[F[α]]]):
     Equal[F[A]] =
   F(A)
 
-
   // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
   implicit def FreeMapEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[FreeMap[T]] =
     freeEqual[MapFunc[T, ?]].apply(Equal[Unit])
+
+  // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
+  implicit def JoinBranchEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[JoinBranch[T]] =
+    freeEqual[QScript[T, ?]].apply(Equal[Unit])
 
   sealed trait ReduceFunc
 
@@ -293,7 +297,7 @@ final case class ThetaJoin[T[_[_]], A](
   rBranch: JoinBranch[T])
 
 object ThetaJoin {
-  implicit def equal[T[_[_]]]: Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ =
+  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ =
     new (Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ) {
       def apply[A](eq: Equal[A]) =
         Equal.equal {

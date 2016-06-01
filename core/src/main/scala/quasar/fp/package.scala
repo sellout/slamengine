@@ -505,6 +505,22 @@ package object fp
     type λ[A] = Coproduct[F, G, A]
   }
 
+  // TODO review definition of equal on coproduct
+  implicit def coproductEqual[F[_], G[_]](
+  implicit fEq: Equal ~> λ[α => Equal[F[α]]],
+           gEq: Equal ~> λ[α => Equal[G[α]]]):
+    Equal ~> λ[α => Equal[Coproduct[F, G, α]]] =
+  new (Equal ~> λ[α => Equal[Coproduct[F, G, α]]]) {
+    def apply[α](eq: Equal[α]) =
+      Equal.equal { (cp1, cp2) =>
+        (cp1.run, cp2.run) match {
+          case (-\/(f1), -\/(f2)) => fEq(eq).equal(f1, f2)
+          case (\/-(g1), \/-(g2)) => gEq(eq).equal(g1, g2)
+          case (_, _) => false
+        }
+      }
+  }
+
   implicit def freeEqual[F[_]: Functor](
   implicit F: Equal ~> λ[α => Equal[F[α]]]):
     Equal ~> λ[α => Equal[Free[F, α]]] =
