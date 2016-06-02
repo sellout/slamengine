@@ -84,7 +84,7 @@ object DataLevelOps {
 
   type FreeMap[T[_[_]]] = Free[MapFunc[T, ?], Unit]
 
-  // TODO this should be found from matryoshka
+  // TODO this should be found from matryoshka - why isn't it being found!?!?
   implicit def NTEqual[F[_], A](implicit A: Equal[A], F: Equal ~> λ[α => Equal[F[α]]]):
     Equal[F[A]] =
   F(A)
@@ -125,6 +125,7 @@ object ReduceFuncs {
 
 object MapFuncs {
   def ObjectProject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def ObjectProjectFree[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
   def ObjectConcat[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
   def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
 
@@ -182,7 +183,8 @@ object Pathable {
           G[Pathable[T, B]] =
         fa match {
           case Root()         => G.point(Root())
-          case Map(a, func)   => f(a) ∘ (Map[T, B](_, func))  // TODO Functor for MapFunc
+          case Empty()        => G.point(Empty())
+          case Map(a, func)   => f(a) ∘ (Map[T, B](_, func))
           case LeftShift(a)   => f(a) ∘ (LeftShift(_))
           case Union(a, l, r) => f(a) ∘ (Union(_, l, r))
         }
@@ -193,6 +195,9 @@ object Pathable {
   * in the structure a backend sees, it represents the mount point.
   */
 final case class Root[T[_[_]], A]() extends Pathable[T, A]
+
+// TODO is this really Pathable?
+final case class Empty[T[_[_]], A]() extends Pathable[T, A]
 
 /** A data-level transformation.
   */
@@ -326,6 +331,37 @@ object ThetaJoin {
     }
 }
 
+// backends can choose to rewrite joins using EquiJoin
+// can rewrite a ThetaJoin as EquiJoin + Filter
+final case class EquiJoin[T[_[_]], A](
+  lKey: FreeMap[T],
+  rKey: FreeMap[T],
+  f: JoinType,
+  src: A,
+  lBranch: JoinBranch[T],
+  rBranch: JoinBranch[T])
+
+object EquiJoin {
+  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ EquiJoin[T, ?])#λ =
+    new (Equal ~> (Equal ∘ EquiJoin[T, ?])#λ) {
+      def apply[A](eq: Equal[A]) =
+        Equal.equal {
+          case (EquiJoin(lk1, rk1, f1, a1, l1, r1),
+                EquiJoin(lk2, rk2, f2, a2, l2, r2)) =>
+            lk1 ≟ lk2 && rk1 ≟ rk2 && f1 ≟ f2 && eq.equal(a1, a2) && l1 ≟ l2 && r1 ≟ r2
+        }
+    }
+
+  implicit def traverse[T[_[_]]]: Traverse[EquiJoin[T, ?]] =
+    new Traverse[EquiJoin[T, ?]] {
+      def traverseImpl[G[_]: Applicative, A, B](
+        fa: EquiJoin[T, A])(
+        f: A => G[B]) =
+        f(fa.src) ∘
+          (EquiJoin(fa.lKey, fa.rKey, fa.f, _, fa.lBranch, fa.rBranch))
+    }
+}
+
 object Transform {
   import MapFuncs._
 
@@ -378,10 +414,14 @@ object Transform {
       implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
     lp match {
       case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
+
       case LogicalPlan.ConstantF(data) => F.inj(Map(
         F.inj(Root[T, Inner[T]]()).embed,
         Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data)))))
-      //case LogicalPlan.FreeF(name) => Map(ObjectProjectFree(name, ()), Null().embed)
+
+      case LogicalPlan.FreeF(name) => F.inj(Map(
+        F.inj(Empty[T, Inner[T]]()).embed,
+        Free.roll(ObjectProjectFree(Free.roll(StrLit(name.toString)), UnitF))))
 
       //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping1(func, input)
       //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping2(func, input)
@@ -429,5 +469,6 @@ object Transform {
 
       //case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
       //  Map(PatternGuard(expr, typ cont fallback), Root().embed)
+      case _ => ??? // TODO
     }
 }
