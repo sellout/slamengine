@@ -425,13 +425,13 @@ object Transform {
     val Merge(left, right, merged) = mergeSrcs(values(0), values(1))
 
     val rewrittenFunc: FreeMap[T] = (left, right) match {
-      case (Some(lname), Some(rname), merged) =>
+      case (Some(lname), Some(rname)) =>
         func(Free.roll(ObjectProject(UnitF, Free.roll(StrLit(lname)))), Free.roll(ObjectProject(UnitF, Free.roll(StrLit(rname)))))
-      case (None, Some(rname), merged) =>
+      case (None, Some(rname)) =>
         func(UnitF, ObjectProject(UnitF, Free.roll(StrLit(rname))))
-      case (Some(lname), None, merged) =>
+      case (Some(lname), None) =>
         func(ObjectProject(UnitF, Free.roll(StrLit(lname))), UnitF)
-      case (None, None, merged) =>
+      case (None, None) =>
         func(UnitF, UnitF)
     }
     Map(merged, rewrittenFunc)
