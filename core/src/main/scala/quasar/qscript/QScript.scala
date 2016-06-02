@@ -37,7 +37,10 @@ sealed trait EJson[A]
 object EJson {
   def toEJson[T[_[_]]](data: Data): T[EJson] = ???
   final case class Null[A]() extends EJson[A]
-  
+  final case class Str[A](str: String) extends EJson[A]
+
+  //def str[A] = pPrism[EJson[A], String] { case Str(str) => str } (Str(_))
+
   implicit def equal: Equal ~> (Equal ∘ EJson)#λ = new (Equal ~> (Equal ∘ EJson)#λ) {
     def apply[A](in: Equal[A]): Equal[EJson[A]] = Equal.equal {
       case _ => true
@@ -95,6 +98,10 @@ object DataLevelOps {
 
   sealed trait ReduceFunc
 
+  object ReduceFunc {
+    implicit val equal: Equal[ReduceFunc] = Equal.equalRef
+  }
+
   sealed trait JoinSide
   final case object LeftSide extends JoinSide
   final case object RightSide extends JoinSide
@@ -117,11 +124,14 @@ object ReduceFuncs {
 
 object MapFuncs {
   def ObjectProject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def ObjectConcat[T[_[_]], A](a1: A, a2: A) = Binary(a1, a2)
-  def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary(a1, a2)
+  def ObjectConcat[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+
+  def StrLit[T[_[_]]: Corecursive, A](str: String) = Nullary[T, A](EJson.Str[T[EJson]](str).embed)
 
   // TODO not what we want
-  def liftOP[T[_[_]]]: FreeMap[T] = Free.liftF(ObjectProject[T, Unit]((), ()))
+  def liftOP[T[_[_]]]: FreeMap[T] = 
+    Free.liftF(ObjectProject[T, Unit]((), ()))
 }
 
 sealed trait SortDir
@@ -301,7 +311,7 @@ object ThetaJoin {
     new (Equal ~> (Equal ∘ ThetaJoin[T, ?])#λ) {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
-          case (ThetaJoin(a1, o1, f1, l1, r1), ThetaJoin(a2, o2, f2, l2, r2)) =>
+          case (ThetaJoin(o1, f1, a1, l1, r1), ThetaJoin(o2, f2, a2, l2, r2)) =>
             eq.equal(a1, a2) && o1 ≟ o2 && f1 ≟ f2 && l1 ≟ l2 && r1 ≟ r2
         }
     }
@@ -311,7 +321,7 @@ object ThetaJoin {
       def traverseImpl[G[_]: Applicative, A, B](
         fa: ThetaJoin[T, A])(
         f: A => G[B]) =
-        f(fa.src) ∘ (ThetaJoin(_, fa.on, fa.f, fa.lBranch, fa.rBranch))
+        f(fa.src) ∘ (ThetaJoin(fa.on, fa.f, _, fa.lBranch, fa.rBranch))
     }
 }
 
@@ -335,6 +345,21 @@ object Transform {
     namer: Option[String],
     merge: QScript[T, A])
 
+  def mergeSrcsPathable[T[_[_]]: Corecursive, A](
+      left: Pathable[T, A],
+      right: Pathable[T, A]): Merge[T, A] =
+    (left, right) match {
+      case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
+        Merge(
+          Some("tmp1"),
+          Some("tmp2"),
+          Map(src1, Free.roll[MapFunc[T, ?], Unit](
+            ObjectConcat(
+              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp1")), m1)),
+              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), m2))))).inject)
+    }
+
+
   def mergeSrcs[T[_[_]], A](
       left: QScript[T, A],
       right: QScript[T, A]): Merge[T, A] =
@@ -342,11 +367,6 @@ object Transform {
     (left, right) match {
       case (l, r) if l == r => Merge(None, None, l)
 
-      case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
-        Merge(
-          Some("tmp1"),
-          Some("tmp2"),
-          Map(src1, ObjectConcat(MakeObject("tmp1", m1), MakeObject("tmp2", m2))))
 
       case (Reduce(src1, m1, r1), Map(src2, m2)) if src1 == src2 =>
         Merge(
