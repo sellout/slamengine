@@ -386,10 +386,14 @@ object Transform {
     namer: Option[String],
     merge: Inner[T])
 
-  def mergeSrcsPathable[T[_[_]]: Corecursive, A](
-      left: Pathable[T, A],
-      right: Pathable[T, A])(
-      implicit F: Pathable[T, ?] :<: QScript[T, ?]): Merge[T, A] =
+  @typeclass trait Mergable[F[_]] {
+    def mergeSrcs()
+  }
+
+  def mergeSrcsPathable[T[_[_]]: Corecursive, F[_]: Mergable, A](
+      left: Pathable[T[F], A],
+      right: Pathable[T[F], A])(
+      implicit F: Pathable[T, ?] :<: F): Merge[T, A] =
     (left, right) match {
       case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
         Merge(
