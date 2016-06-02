@@ -134,10 +134,6 @@ object MapFuncs {
   def MakeArray[T[_[_]], A](a1: A) = Unary[T, A](a1)
 
   def StrLit[T[_[_]]: Corecursive, A](str: String) = Nullary[T, A](EJson.Str[T[EJson]](str).embed)
-
-  // TODO not what we want
-  def liftOP[T[_[_]]]: FreeMap[T] = 
-    Free.liftF(ObjectProject[T, Unit]((), ()))
 }
 
 sealed trait SortDir
@@ -424,7 +420,12 @@ object Transform {
 
   def invokeMapping2[T[_[_]]](
       func: BinaryFunc,
-      values: Func.Input[Inner[T], nat._2]): QScript[T, Inner[T]] = ???
+      values: Func.Input[Inner[T], nat._2])(
+      implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
+    func match {
+      case structural.MakeObject => F.inj(Map(values(1), Free.roll(MakeObject(values(0), UnitF))))
+      case _ => ??? // TODO
+    }
 
   def algebra[T[_[_]]: Corecursive](
       lp: LogicalPlan[Inner[T]])(
@@ -440,8 +441,14 @@ object Transform {
         F.inj(Empty[T, Inner[T]]()).embed,
         Free.roll(ObjectProjectFree(Free.roll(StrLit(name.toString)), UnitF))))
 
-      //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping1(func, input)
-      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping2(func, input)
+      // TODO this illustrates the untypesafe ugliness b/c the pattern match does not guarantee the appropriate sized `Sized`
+      // https://github.com/milessabin/shapeless/pull/187
+      case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Mapping =>
+        invokeMapping1(func, Func.Input1(a1))(F)
+
+      case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Mapping =>
+        invokeMapping2(func, Func.Input2(a1, a2))(F)
+
       //case LogicalPlan.InvokeF(func @ TernaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping3(func, input)
 
       //// TODO bucketing handled by GroupBy
