@@ -19,10 +19,12 @@ package quasar.qscript
 import quasar._
 import quasar.fp._
 import quasar.Predef._
+import quasar.std.StdLib._
 
 import matryoshka._, FunctorT.ops._
 import pathy.Path._
 import scalaz._, Scalaz._, Inject._
+import shapeless.{ Data => _, _}
 
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -128,6 +130,8 @@ object MapFuncs {
   def ObjectProjectFree[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
   def ObjectConcat[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
   def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+
+  def MakeArray[T[_[_]], A](a1: A) = Unary[T, A](a1)
 
   def StrLit[T[_[_]]: Corecursive, A](str: String) = Nullary[T, A](EJson.Str[T[EJson]](str).embed)
 
@@ -408,6 +412,19 @@ object Transform {
       // TODO handle other cases (recursive and not)
       case _ => ???
     }
+
+  def invokeMapping1[T[_[_]]](
+      func: UnaryFunc,
+      values: Func.Input[Inner[T], nat._1])(
+      implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
+    func match {
+      case structural.MakeArray => F.inj(Map(values(0), Free.roll(MakeArray(UnitF))))
+      case _ => ??? // TODO
+    }
+
+  def invokeMapping2[T[_[_]]](
+      func: BinaryFunc,
+      values: Func.Input[Inner[T], nat._2]): QScript[T, Inner[T]] = ???
 
   def algebra[T[_[_]]: Corecursive](
       lp: LogicalPlan[Inner[T]])(
