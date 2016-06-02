@@ -18,8 +18,6 @@ package quasar
 
 import quasar.fp._
 
-import scalaz.{:+: => _, _}
-
 /** Here we no longer care about provenance. Backends can’t do anything with
   * it, so we simply represent joins and crosses directly. This also means that
   * we don’t need to model certain things – project_d is just a data-level

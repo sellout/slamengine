@@ -20,7 +20,7 @@ import quasar._
 import quasar.fp._
 import quasar.Predef._
 
-import matryoshka._, Recursive.ops._, FunctorT.ops._
+import matryoshka._, FunctorT.ops._
 import pathy.Path._
 import scalaz._, Scalaz._, Inject._
 
@@ -36,6 +36,7 @@ import scalaz._, Scalaz._, Inject._
 sealed trait EJson[A]
 object EJson {
   def toEJson[T[_[_]]](data: Data): T[EJson] = ???
+
   final case class Null[A]() extends EJson[A]
   final case class Str[A](str: String) extends EJson[A]
 
@@ -325,12 +326,6 @@ object ThetaJoin {
     }
 }
 
-// TODO should be a ThetaJoin
-final case class Cross[T[_[_]], A](
-  src: A,
-  left: (String, JoinBranch[T]),
-  right: (String, JoinBranch[T]))
-
 object Transform {
   import MapFuncs._
 
@@ -368,21 +363,24 @@ object Transform {
     (left, right) match {
       case (l, r) if l == r => Merge(None, None, l)
 
-
-      case (Reduce(src1, m1, r1), Map(src2, m2)) if src1 == src2 =>
-        Merge(
-          Some("tmp1"),
-          Some("tmp2"),
-          Cross(src1, ("tmp1", Reduce(UnitF, m1, r1)), ("tmp2", Map(UnitF, m2))))
+      //case (Reduce(src1, m1, r1), Map(src2, m2)) if src1 == src2 =>
+      //  Merge(
+      //    Some("tmp1"),
+      //    Some("tmp2"),
+      //    Cross(src1, ("tmp1", Reduce(UnitF, m1, r1)), ("tmp2", Map(UnitF, m2))))
 
       // TODO handle other cases (recursive and not)
       case _ => ???
     }
 
-  def algebra[T[_[_]]: Corecursive](lp: LogicalPlan[Inner[T]]): QScript[T, Inner[T]] =
+  def algebra[T[_[_]]: Corecursive](
+      lp: LogicalPlan[Inner[T]])(
+      implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
     lp match {
       case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
-      case LogicalPlan.ConstantF(data) => Map(Root[T, Inner[T]]().embed, Nullary(EJson.toEJson(data).embed))
+      case LogicalPlan.ConstantF(data) => F.inj(Map(
+        F.inj(Root[T, Inner[T]]()).embed,
+        Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data)))))
       //case LogicalPlan.FreeF(name) => Map(ObjectProjectFree(name, ()), Null().embed)
 
       //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping1(func, input)
