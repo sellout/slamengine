@@ -22,7 +22,7 @@ import quasar.Predef._
 
 import matryoshka._, Recursive.ops._, FunctorT.ops._
 import pathy.Path._
-import scalaz._, Scalaz._
+import scalaz._, Scalaz._, Inject._
 
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -347,16 +347,17 @@ object Transform {
 
   def mergeSrcsPathable[T[_[_]]: Corecursive, A](
       left: Pathable[T, A],
-      right: Pathable[T, A]): Merge[T, A] =
+      right: Pathable[T, A])(
+      implicit F: Pathable[T, ?] :<: QScript[T, ?]): Merge[T, A] =
     (left, right) match {
       case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
         Merge(
           Some("tmp1"),
           Some("tmp2"),
-          Map(src1, Free.roll[MapFunc[T, ?], Unit](
+          F.inj(Map(src1, Free.roll[MapFunc[T, ?], Unit](
             ObjectConcat(
               Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp1")), m1)),
-              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), m2))))).inject)
+              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), m2)))))))
     }
 
 
