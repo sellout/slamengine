@@ -384,7 +384,7 @@ object Transform {
   final case class Merge[T[_[_]], A](
     namel: Option[String],
     namer: Option[String],
-    merge: QScript[T, A])
+    merge: Inner[T])
 
   def mergeSrcsPathable[T[_[_]]: Corecursive, A](
       left: Pathable[T, A],
@@ -403,8 +403,8 @@ object Transform {
 
 
   def mergeSrcs[T[_[_]], A](
-      left: QScript[T, A],
-      right: QScript[T, A]): Merge[T, A] =
+      left: Inner[T],
+      right: Inner[T]): Merge[T, A] =
 
     (left, right) match {
       case (l, r) if l == r => Merge(None, None, l)
@@ -419,14 +419,18 @@ object Transform {
       case _ => ???
     }
 
-  def merge2Map[T[_[_]], A](
+  def merge2Map[T[_[_]]: Corecursive, A](
       values: Func.Input[Inner[T], nat._2])(
-      func: (A, A) => Binary[T, A]): QScript[T, A] = {
+      func: (A, A) => Pathable[T, A])(
+      implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, A] = {
+
     val Merge(left, right, merged) = mergeSrcs(values(0), values(1))
 
     val rewrittenFunc: FreeMap[T] = (left, right) match {
       case (Some(lname), Some(rname)) =>
-        func(Free.roll(ObjectProject(UnitF, Free.roll(StrLit(lname)))), Free.roll(ObjectProject(UnitF, Free.roll(StrLit(rname)))))
+        F.inj(func(
+          Free.roll[MapFunc[T, ?], Unit](ObjectProject(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]](lname)))),
+          Free.roll[MapFunc[T, ?], Unit](ObjectProject(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]](rname))))))
       case (None, Some(rname)) =>
         func(UnitF, ObjectProject(UnitF, Free.roll(StrLit(rname))))
       case (Some(lname), None) =>
