@@ -121,8 +121,14 @@ object DataLevelOps {
 
 import DataLevelOps._
 
+// TODO we should statically verify that these have `DimensionalEffect` of `Reduction`
 object ReduceFuncs {
+  final case object Count extends ReduceFunc
   final case object Sum extends ReduceFunc
+  final case object Min extends ReduceFunc
+  final case object Max extends ReduceFunc
+  final case object Avg extends ReduceFunc
+  final case object Arbitrary extends ReduceFunc
 }
 
 object MapFuncs {
@@ -250,6 +256,9 @@ object QScriptCore {
     }
 }
 
+final case class PatternGuard[T[_[_]], A](expr: A, typ: Type, cont: A, fallback: A)
+    extends QScriptCore[T, A]
+
 /** Performs a reduction over a dataset, with the dataset partitioned by the
   * result of the MapFunc. So, rather than many-to-one, this is many-to-fewer.
   *
@@ -364,6 +373,7 @@ object EquiJoin {
 
 object Transform {
   import MapFuncs._
+  import ReduceFuncs._
 
   type Inner[T[_[_]]] = T[QScript[T, ?]]
   type QSAlgebra[T[_[_]]] = LogicalPlan[Inner[T]] => QScript[T, Inner[T]]
@@ -409,6 +419,24 @@ object Transform {
       case _ => ???
     }
 
+  def merge2Map[T[_[_]], A](
+      values: Func.Input[Inner[T], nat._2])(
+      func: (A, A) => Binary[T, A]): QScript[T, A] = {
+    val Merge(left, right, merged) = mergeSrcs(values(0), values(1))
+
+    val rewrittenFunc: FreeMap[T] = (left, right) match {
+      case (Some(lname), Some(rname), merged) =>
+        func(Free.roll(ObjectProject(UnitF, Free.roll(StrLit(lname)))), Free.roll(ObjectProject(UnitF, Free.roll(StrLit(rname)))))
+      case (None, Some(rname), merged) =>
+        func(UnitF, ObjectProject(UnitF, Free.roll(StrLit(rname))))
+      case (Some(lname), None, merged) =>
+        func(ObjectProject(UnitF, Free.roll(StrLit(lname))), UnitF)
+      case (None, None, merged) =>
+        func(UnitF, UnitF)
+    }
+    Map(merged, rewrittenFunc)
+  }
+
   def invokeMapping1[T[_[_]]](
       func: UnaryFunc,
       values: Func.Input[Inner[T], nat._1])(
@@ -423,13 +451,32 @@ object Transform {
       values: Func.Input[Inner[T], nat._2])(
       implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
     func match {
-      case structural.MakeObject => F.inj(Map(values(1), Free.roll(MakeObject(values(0), UnitF))))
+      case structural.MakeObject => ??? //F.inj(Map(values(1), Free.roll(MakeObject(values(0), UnitF))))
       case _ => ??? // TODO
+    }
+
+  // TODO we need to handling bucketing from GroupBy
+  // the buckets will not always be UnitF, if we have grouped previously
+  //
+  // TODO also we should be able to statically guarantee that we are matching on all reductions here
+  // this involves changing how DimensionalEffect is assigned (algebra rather than parameter)
+  def invokeReduction1[T[_[_]]](
+      func: UnaryFunc,
+      values: Func.Input[Inner[T], nat._1])(
+      implicit F: QScriptCore[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
+    func match {
+      case agg.Count     => F.inj(Reduce(values(0), UnitF, Count))
+      case agg.Sum       => F.inj(Reduce(values(0), UnitF, Sum))
+      case agg.Min       => F.inj(Reduce(values(0), UnitF, Min))
+      case agg.Max       => F.inj(Reduce(values(0), UnitF, Max))
+      case agg.Avg       => F.inj(Reduce(values(0), UnitF, Avg))
+      case agg.Arbitrary => F.inj(Reduce(values(0), UnitF, Arbitrary))
     }
 
   def algebra[T[_[_]]: Corecursive](
       lp: LogicalPlan[Inner[T]])(
-      implicit F: Pathable[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
+      implicit F: Pathable[T, ?] :<: QScript[T, ?],
+               G: QScriptCore[T, ?] :<: QScript[T, ?]): QScript[T, Inner[T]] =
     lp match {
       case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
 
@@ -441,6 +488,9 @@ object Transform {
         F.inj(Empty[T, Inner[T]]()).embed,
         Free.roll(ObjectProjectFree(Free.roll(StrLit(name.toString)), UnitF))))
 
+      case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
+        G.inj(PatternGuard(expr, typ, cont, fallback))
+
       // TODO this illustrates the untypesafe ugliness b/c the pattern match does not guarantee the appropriate sized `Sized`
       // https://github.com/milessabin/shapeless/pull/187
       case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Mapping =>
@@ -451,11 +501,12 @@ object Transform {
 
       //case LogicalPlan.InvokeF(func @ TernaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Mapping => invokeMaping3(func, input)
 
-      //// TODO bucketing handled by GroupBy
-      //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Reduction => invokeReduction1(func, input)
+      case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Reduction =>
+        invokeReduction1(func, Func.Input1(a1))(G)
 
       //// special case Sort (is Sort a Transformation?)
       //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Sifting => invokeSifting2(func, input)
+
       //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Expansion => invokeLeftShift(func, input)
 
       //// handling bucketing for sorting
@@ -491,8 +542,6 @@ object Transform {
       //// Map(Map(src=form, MakeObject(name, ())), body)
       //case LogicalPlan.LetF(name, form, body) => rewriteLet(body)(qsRewrite(name, form))
 
-      //case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
-      //  Map(PatternGuard(expr, typ cont fallback), Root().embed)
       case _ => ??? // TODO
     }
 }
