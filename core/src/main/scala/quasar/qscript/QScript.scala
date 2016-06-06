@@ -25,6 +25,7 @@ import matryoshka._, FunctorT.ops._
 import pathy.Path._
 import scalaz._, Scalaz._, Inject._
 import shapeless.{ Data => _, _}
+import simulacrum.typeclass
 
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -381,47 +382,58 @@ object Transform {
   def toQscript[T[_[_]]: FunctorT, A](lp: T[LogicalPlan])(f: QSAlgebra[T]): T[QScript[T, ?]] =
     lp.transCata(f)
 
-  final case class Merge[T[_[_]], A](
+  final case class Merge[A](
     namel: Option[String],
     namer: Option[String],
-    merge: Inner[T])
+    merge: A)
 
-  @typeclass trait Mergable[F[_]] {
-    def mergeSrcs()
+  @typeclass trait Mergeable[A] {
+    def mergeSrcs(a1: A, a2: A): Merge[A]
   }
 
-  def mergeSrcsPathable[T[_[_]]: Corecursive, F[_]: Mergable, A](
-      left: Pathable[T[F], A],
-      right: Pathable[T[F], A])(
-      implicit F: Pathable[T, ?] :<: F): Merge[T, A] =
-    (left, right) match {
-      case (Map(src1, m1), Map(src2, m2)) if src1 == src2 =>
-        Merge(
-          Some("tmp1"),
-          Some("tmp2"),
-          F.inj(Map(src1, Free.roll[MapFunc[T, ?], Unit](
-            ObjectConcat(
-              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp1")), m1)),
-              Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), m2)))))))
+  implicit def mergeFix[F[_]](implicit mf: Mergeable ~> Mergeable[F[?]]): Mergeable[Fix[F]] = new Mergeable[Fix[F]] {
+    def mergeSrcs(f1: Fix[F], f2: Fix[F]): Merge[Fix[F]] =
+      val Merge(namel, namer, src): Merge[F[Fix[F]]] = // TODO lensify
+        mf(mergeFix[F]).mergeSrcs(f1.unFix, f2.unFix)
+
+      Merge(namel, namer, Fix(src))
+  }
+
+  implicit def mergeCoproduct[F[_], G[_]](implicit mf: Mergeable ~> Mergeable[F[?]]): Mergeable ~> Mergeable[Coproduct[F, G, ?]] = new (Mergeable ~> Mergeable[Coproduct[F, G, ?]]) = {
+    def apply[A](mergeable: Mergeable[A]): Mergeable[Coproduct[F, G, A]] = new Mergeable[Coproduct[F, G, A]] = {
+      def mergeSrcs(cp1: Coproduct[F, G, A], cp2: Coproduct[F, G, A]): Merge[Coproduct[F, G, A]] = {
+        (cp1.run, cp2.run) match {
+          case (-\/(left1), -\/(left2)) => 
+            val Merge(namel, namer, src) = mergeSrcs(left1, left2) // Merge[F[A]]
+            Merge(namel, namer, Coproduct(-\/(src)))
+        }
+      }
     }
+  }
 
+  // (implicit F: M ~> M[F]): Mergeable[T[F]]
 
-  def mergeSrcs[T[_[_]], A](
-      left: Inner[T],
-      right: Inner[T]): Merge[T, A] =
+  def rebase(in: FreeMap[T], field: Option[String]): FreeMap[T] = ???
 
-    (left, right) match {
-      case (l, r) if l == r => Merge(None, None, l)
+  implicit def mergePathable[T[_[_]]]: Mergeable ~> Mergeable[Pathable[T, ?]] = new (Mergeable ~> (Mergeable comp Pathable[T, ?])#lam) {
+    def apply[A](mergeable: Mergeable[A]): Mergeable[Pathable[T, A]] = new Mergeable[Pathable[T, A]] {
+      def mergeSrcs(p1: Pathable[T, A], p2: Pathable[T, A]): Merge[Pathable[T, A]] =
+      (p1, p2) match {
+        case (Map(a1, m1), Map(a2, m2)) => {
+          val Merge(left, right, src): Merge[A] =
+            mergeable.mergeScrs(a1, a2)
 
-      //case (Reduce(src1, m1, r1), Map(src2, m2)) if src1 == src2 =>
-      //  Merge(
-      //    Some("tmp1"),
-      //    Some("tmp2"),
-      //    Cross(src1, ("tmp1", Reduce(UnitF, m1, r1)), ("tmp2", Map(UnitF, m2))))
-
-      // TODO handle other cases (recursive and not)
-      case _ => ???
+          Merge(
+            Some("tmp1"),
+            Some("tmp2"),
+            Map(src, Free.roll[MapFunc[T, ?], Unit](
+              ObjectConcat(
+                Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp1")), rebase(m1, left))),
+                Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), rebase(m2, right)))))))
+        }
+      }
     }
+  }
 
   def merge2Map[T[_[_]]: Corecursive, A](
       values: Func.Input[Inner[T], nat._2])(
