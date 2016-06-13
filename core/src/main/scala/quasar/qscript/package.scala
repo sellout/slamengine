@@ -26,6 +26,8 @@ import quasar.fp._
   * that doesn’t include the cross portion.
   */
 package object qscript {
+  type Pathable[T[_[_]], A] = (Const[DeadEnd, ?] :+: SourcedPathable[T, ?])#λ[A]
+
   /** These are the operations included in all forms of QScript.
     */
   type QScriptPrim[T[_[_]], A] = (Pathable[T, ?] :+: QScriptCore[T, ?])#λ[A]
