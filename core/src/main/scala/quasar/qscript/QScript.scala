@@ -392,6 +392,8 @@ object Transform {
 
   type Delay[F[_], G[_]] = F ~> (F ∘ G)#λ
 
+  type Pures[T[_[_]], A] = List[QScriptPure[T, A]]
+
   def toQscript[T[_[_]]: FunctorT, A](lp: T[LogicalPlan])(f: QSAlgebra[T]): T[QScriptPure[T, ?]] =
     lp.transCata(f)
 
@@ -415,51 +417,50 @@ object Transform {
              G: QScriptCore[T, ?] :<: QScriptPure[T, ?],
              H: ThetaJoin[T, ?] :<: QScriptPure[T, ?]): = List[QScriptPure[T, Unit]] 
     qs.run match {
-      case -\/(thetaJoin) => H.inj(thetaJoin ^.> src := ()) :: thetaJoin.src
+      case -\/(thetaJoin) => H.inj(thetaJoin.void) :: thetaJoin.src
       case \/-(prim) => prim.run match {
         case -\/(pathable) => pathable.run match {
-          case -\/(dead) => E.inj(dead ^.> src := ()) :: Nil
-          case \/-(srcd) => F.inj(srcd ^.> src := ()) :: srcd.src
+          case -\/(dead) => E.inj(dead.void) :: Nil
+          case \/-(srcd) => F.inj(srcd.void) :: srcd.src
         }
-        //case \/-(core) => G.inj(src.modify(())(core)) :: core.src
-        case \/-(core) => G.inj(core.copy(src=()) :: core.src
+        case \/-(core) => G.inj(core.void) :: core.src
       }
     }
 
-  def delinearizeInner[T[_[_]]](input: List[QSP]): QScriptPure[List[QScriptPure[T, Unit]]] = input match {
+  def delinearizeInner[T[_[_]], A](input: Pures[T, A]): QScriptPure[Pures[T, A]] = input match {
     case Nil => Root()
-    case h :: t => h.copy(src=t)
+    case h :: t => h.map(_ => t)
   }
 
-  def delinearizeJoinBranch[T[_[_]]](input: List[QSP]): JoinBranch[T] = input match {
+  def delinearizeJoinBranch[T[_[_]], A](input: Pures[T, A]): Unit \/ QScriptPure[Pures[T, A]] = input match {
     case Nil => ().left
-    case h :: t => h.copy(src=t).right
+    case h :: t => h.map(_ => t).right
   }
 
-  def unzipper: ListF[QSP, (List[QSP], List[QSP], List[QSP])] => (List[QSP], List[QSP], List[QSP]) = {
+  def unzipper[T[_[_]], A]: ListF[QSP, (Pures[T, A], Pures[T, A], Pures[T, A])] => (Pures[T, A], Pures[T, A], Pures[T, A]) = {
     case NilF() => (Nil, Nil, Nil)
     case ConsF(head, (acc, l, r)) => (head :: acc, l, r)
   }
   
-  //  (List[QSP], List[QSP]) =>  (List[QSP], List[QSP], List[QSP]) \/ ListF[QSP, (List[QSP], List[QSP])]
-  //  (List[QSP], List[QSP]) =>  ListF[QSP, (List[QSP], List[QSP], List[QSP]) \/ (List[QSP], List[QSP])]
-  def zipper: ElgotCoalgebra[(List[QSP], List[QSP], List[QSP]) \/ ?, ListF[QSP, ?], ((MF, MF), (List[QSP], List[QSP]))] {
+  //  (Pures[T, A], Pures[T, A]) =>  (Pures[T, A], Pures[T, A], Pures[T, A]) \/ ListF[QSP, (Pures[T, A], Pures[T, A])]
+  //  (Pures[T, A], Pures[T, A]) =>  ListF[QSP, (Pures[T, A], Pures[T, A], Pures[T, A]) \/ (Pures[T, A], Pures[T, A])]
+  def zipper: ElgotCoalgebra[(Pures[T, A], Pures[T, A], Pures[T, A]) \/ ?, ListF[QScriptPure[T, ?], ?], ((FreeMap[T], FreeMap[T]), (Pures[T, A], Pures[T, A]))] {
     case (Nil, Nil) => (Nil, Nil, Nil).left
     case (Nil, r)   => (Nil, Nil, r).left
     case (l,   Nil) => (Nil, l,   Nil).left
     case (lm, rm),(l :: ls, r :: rs) => mergeSrcs(l, r).fold((Nil, l :: ls, r :: rs).left)((inn, lmf, rmf) => ConsF(inn, ((lmf, rmf), (ls, rs))))
   }
 
-  def merge(left: Inner[T], right: Inner[T]): Merge2[T, Inner[T]] = {
-    val lLin: List[QScriptPure[T, Unit]] = linearize(left).reverse
-    val rLin: List[QScriptPure[T, Unit]] = linearize(right).reverse
+  def merge[T[_[_]]](left: Inner[T], right: Inner[T]): Merge2[T, Inner[T]] = {
+    val lLin: Pures[T, Unit] = linearize(left).reverse
+    val rLin: Pures[T, Unit] = linearize(right).reverse
 
     val (common, lTail, rTail) = ((UnitF, UnitF), (lLin, rLin)).elgot(unzipper, zipper)
 
     Merge2(
-      delinearizeInner(common.reverse),
-      delinearizeJoinBranch(lTail.reverse),
-      delinearizeJoinBranch(rTail.reverse))
+      common.reverse.ana(delinearizeInner),
+      lTail.reverse.ana(delinearizeJoinBranch),
+      rTail.reverse.ana(delinearizeJoinBranch))
   }
 
   // replace Unit in `in` with `field`
