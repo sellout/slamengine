@@ -533,4 +533,11 @@ package object fp
         case (_,       _)       => false
       })
   }
+
+  type Delay[F[_], G[_]] = F ~> (F ∘ G)#λ
+
+  implicit def constEqual[A: Equal]: Delay[Equal, Const[A, ?]] = new Delay[Equal, Const[A, ?]] {
+    def apply[B](eq: Equal[B]): Equal[Const[A, B]] =
+      Equal.equal((c1, c2) => c1.getConst === c2.getConst)
+  }
 }

@@ -18,6 +18,8 @@ package quasar
 
 import quasar.fp._
 
+import scalaz.{:+: => _, _}
+
 /** Here we no longer care about provenance. Backends can’t do anything with
   * it, so we simply represent joins and crosses directly. This also means that
   * we don’t need to model certain things – project_d is just a data-level
@@ -30,7 +32,7 @@ package object qscript {
 
   /** These are the operations included in all forms of QScript.
     */
-  type QScriptPrim[T[_[_]], A] = (Pathable[T, ?] :+: QScriptCore[T, ?])#λ[A]
+  type QScriptPrim[T[_[_]], A] = (QScriptCore[T, ?] :+: Pathable[T, ?])#λ[A]
 
   /** This is the target of the core compiler. Normalization is applied to this
     * structure, and it contains no Read or EquiJoin.
