@@ -218,6 +218,7 @@ final case object Empty extends DeadEnd
 /** A data-level transformation.
   */
 final case class Map[T[_[_]], A](src: A, f: FreeMap[T]) extends SourcedPathable[T, A]
+// Map(LeftShift(/foo/bar/baz), ObjectConcat(ObjectProject((), "foo"), ObjectProject((), "bar")))
 
 /** Zooms in one level on the data, turning each map or array into a set of
   * values. Other data types become undefined.
@@ -264,6 +265,7 @@ object QScriptCore {
           case Reduce(a, b, func) => f(a) ∘ (Reduce(_, b, func))
           case Sort(a, b, o)      => f(a) ∘ (Sort(_, b, o))
           case Filter(a, func)    => f(a) ∘ (Filter(_, func))
+          case _ => ???
         }
     }
 }
@@ -419,7 +421,19 @@ object Transform {
   def H[T[_[_]]] = implicitly[ThetaJoin[T, ?] :<: QScriptPure[T, ?]]
 
   @typeclass trait Mergeable[A] {
-    def mergeSrcs[T[_[_]]: Corecursive](fm1: FreeMap[T], fm2: FreeMap[T], a1: A, a2: A): Option[Merge[T, A]]
+    type IT[F[_]]
+
+    implicit def ev: Corecursive[IT] = implicitly
+
+    def mergeSrcs(
+        fm1: FreeMap[IT],
+        fm2: FreeMap[IT],
+        a1: A,
+        a2: A): Option[Merge[IT, A]]
+  }
+
+  object Mergeable {
+    type Aux[T[_[_]], A] = Mergeable[A] { type IT[F[_]] = T[F] }
   }
 
   // replace Unit in `in` with `field`
@@ -432,57 +446,65 @@ object Transform {
   //}
     // Const, ThetaJoin, DeadEnd
 
-  implicit def mergeConst[A: Mergeable]: Mergeable[Const[A, Unit]] = new Mergeable[Const[A, Unit]] {
-    def mergeSrcs[T[_[_]]: Corecursive](
+  implicit def mergeConst[T[_[_]]: Corecursive, A: Mergeable](implicit ma: Mergeable.Aux[T, A]): Mergeable[Const[A, Unit]] = new Mergeable[Const[A, Unit]] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
         left: FreeMap[T],
         right: FreeMap[T],
         p1: Const[A, Unit],
         p2: Const[A, Unit]): Option[Merge[T, Const[A, Unit]]] =
-      Mergeable[A].mergeSrcs(left, right, p1.getConst, p2.getConst).map {
+      ma.mergeSrcs(left, right, p1.getConst, p2.getConst).map {
         case AbsMerge(src, l, r) => AbsMerge(Const(src), l, r)
       }
   }
 
-  implicit def mergeDeadEnd: Mergeable[DeadEnd] = new Mergeable[DeadEnd] {
-    def mergeSrcs[T[_[_]]: Corecursive](
-        left: FreeMap[T],
-        right: FreeMap[T],
+  implicit def mergeDeadEnd[T[_[_]]: Corecursive]: Mergeable[DeadEnd] = new Mergeable[DeadEnd] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
+        left: FreeMap[IT],
+        right: FreeMap[IT],
         p1: DeadEnd,
-        p2: DeadEnd): Option[Merge[T, DeadEnd]] =
+        p2: DeadEnd): Option[Merge[IT, DeadEnd]] =
       if (p1 === p2)
-        Some(AbsMerge[T, DeadEnd, FreeMap](p1, UnitF, UnitF))
+        Some(AbsMerge[IT, DeadEnd, FreeMap](p1, UnitF, UnitF))
       else
         None
   }
 
-  implicit def mergeThetaJoin[T[_[_]]]: Mergeable[ThetaJoin[T, Unit]] = new Mergeable[ThetaJoin[T, Unit]] {
-    def mergeSrcs[T[_[_]]: Corecursive](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: ThetaJoin[T, Unit],
-        p2: ThetaJoin[T, Unit]): Option[Merge[T, ThetaJoin[T, Unit]]] =
+  implicit def mergeThetaJoin[T[_[_]]: Corecursive]: Mergeable[ThetaJoin[T, Unit]] = new Mergeable[ThetaJoin[T, Unit]] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
+        left: FreeMap[IT],
+        right: FreeMap[IT],
+        p1: ThetaJoin[IT, Unit],
+        p2: ThetaJoin[IT, Unit]): Option[Merge[IT, ThetaJoin[IT, Unit]]] =
       if (p1 == p2)
-        Some(AbsMerge[T, ThetaJoin[T, Unit], FreeMap](p1, UnitF, UnitF))
+        Some(AbsMerge[IT, ThetaJoin[IT, Unit], FreeMap](p1, UnitF, UnitF))
       else
         None
   }
 
   def combineReduce(r1: ReduceFunc, r2: ReduceFunc): ReduceFunc = ???
 
-  implicit def mergeQScriptCore[T[_[_]]]: Mergeable[QScriptCore[T, Unit]] = new Mergeable[QScriptCore[T, Unit]] {
-    def mergeSrcs[IT[_[_]]: Corecursive](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: QScriptCore[T, Unit],
-        p2: QScriptCore[T, Unit]): Option[Merge[IT, QScriptCore[T, Unit]]] =
+  implicit def mergeQScriptCore[T[_[_]]: Corecursive]: Mergeable[QScriptCore[T, Unit]] = new Mergeable[QScriptCore[T, Unit]] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
+        left: FreeMap[IT],
+        right: FreeMap[IT],
+        p1: QScriptCore[IT, Unit],
+        p2: QScriptCore[IT, Unit]): Option[Merge[IT, QScriptCore[IT, Unit]]] =
       (p1, p2) match {
-        case (t1, t2) if t1 == t2 => AbsMerge[IT, QScriptCore[T, Unit], FreeMap](t1, UnitF, UnitF).some
+        case (t1, t2) if t1 == t2 => AbsMerge[IT, QScriptCore[IT, Unit], FreeMap](t1, UnitF, UnitF).some
         case (Reduce(_, bucket1, func1), Reduce(_, bucket2, func2)) => {
           val mapL = rebase(bucket1, left)
           val mapR = rebase(bucket2, right)
 
           if (mapL == mapR)
-            AbsMerge[IT, QScriptCore[T, Unit], FreeMap](Reduce((), mapL, combineReduce(func1, func2)), UnitF, UnitF).some
+            AbsMerge[IT, QScriptCore[IT, Unit], FreeMap](Reduce((), mapL, combineReduce(func1, func2)), UnitF, UnitF).some
           else
             None
         }
@@ -490,8 +512,14 @@ object Transform {
       }
   }
 
-  implicit def mergeSourcedPathable[T[_[_]]: Corecursive]: Mergeable[SourcedPathable[T, Unit]] = new Mergeable[SourcedPathable[T, Unit]] {
-    def mergeSrcs[IT[_[_]]: Corecursive](left: FreeMap[IT], right: FreeMap[IT], p1: SourcedPathable[T, Unit], p2: SourcedPathable[T, Unit])(implicit ev: FreeMap[IT] === FreeMap[T]): Option[Merge[IT, SourcedPathable[T, Unit]]] =
+  implicit def mergeSourcedPathable[T[_[_]]]: Mergeable[SourcedPathable[T, Unit]] = new Mergeable[SourcedPathable[T, Unit]] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
+        left: FreeMap[IT],
+        right: FreeMap[IT],
+        p1: SourcedPathable[IT, Unit],
+        p2: SourcedPathable[IT, Unit]): Option[Merge[IT, SourcedPathable[IT, Unit]]] =
       (p1, p2) match {
         case (Map(_, m1), Map(_, m2)) => {
           val lf = 
@@ -499,12 +527,13 @@ object Transform {
           val rf =
             Free.roll(ObjectProject[IT, FreeMap[IT]](UnitF, Free.roll[MapFunc[IT, ?], Unit](StrLit[IT, FreeMap[IT]]("tmp2"))))
           
-          AbsMerge[IT, SourcedPathable[T, Unit], FreeMap](Map((), Free.roll[MapFunc[T, ?], Unit](
+          AbsMerge[IT, SourcedPathable[IT, Unit], FreeMap](Map((), Free.roll[MapFunc[IT, ?], Unit](
               ObjectConcat(
-                Free.roll[MapFunc[T, ?], Unit](MakeObject[T, FreeMap[T]](Free.roll(StrLit[T, FreeMap[T]]("tmp1")), rebase(m1, ev(left)))),
-                Free.roll[MapFunc[T, ?], Unit](MakeObject[T, FreeMap[T]](Free.roll(StrLit[T, FreeMap[T]]("tmp2")), rebase(m2, ev(right))))))),
+                Free.roll[MapFunc[IT, ?], Unit](MakeObject[IT, FreeMap[T]](Free.roll(StrLit[IT, FreeMap[T]]("tmp1")), rebase(m1, left))),
+                Free.roll[MapFunc[IT, ?], Unit](MakeObject[IT, FreeMap[T]](Free.roll(StrLit[IT, FreeMap[T]]("tmp2")), rebase(m2, right)))))),
           lf, rf).some
         }
+        case _ => None
       }
   }
 
@@ -517,10 +546,16 @@ object Transform {
   //
   // Map(Root(), ObjConcat())]
 
-  implicit def mergeCoproduct[F[_], G[_]](
-      implicit mf: Mergeable[F[Unit]],
-               mg: Mergeable[G[Unit]]): Mergeable[Coproduct[F, G, Unit]] = new Mergeable[Coproduct[F, G, Unit]] {
-    def mergeSrcs[T[_[_]]: Corecursive](left: FreeMap[T], right: FreeMap[T], cp1: Coproduct[F, G, Unit], cp2: Coproduct[F, G, Unit]): Option[Merge[T, Coproduct[F, G, Unit]]] = {
+  implicit def mergeCoproduct[T[_[_]]: Corecursive, F[_], G[_]](
+      implicit mf: Mergeable.Aux[T, F[Unit]],
+               mg: Mergeable.Aux[T, G[Unit]]): Mergeable[Coproduct[F, G, Unit]] = new Mergeable[Coproduct[F, G, Unit]] {
+    type IT[F[_]] = T[F]
+
+    def mergeSrcs(
+        left: FreeMap[IT],
+        right: FreeMap[IT],
+        cp1: Coproduct[F, G, Unit],
+        cp2: Coproduct[F, G, Unit]): Option[Merge[IT, Coproduct[F, G, Unit]]] = {
       (cp1.run, cp2.run) match {
         case (-\/(left1), -\/(left2)) =>
           mf.mergeSrcs(left, right, left1, left2).map {
@@ -530,7 +565,7 @@ object Transform {
           mg.mergeSrcs(left, right, right1, right2).map {
             case AbsMerge(src, left, right) => AbsMerge(Coproduct(\/-(src)), left, right)
           }
-        case (-\/(left1), \/-(right2)) => None
+        case (_, _) => None
       }
     }
   }
@@ -568,14 +603,15 @@ object Transform {
 
   //  (Pures[T, A], Pures[T, A]) =>  (Pures[T, A], Pures[T, A], Pures[T, A]) \/ ListF[QSP, (Pures[T, A], Pures[T, A])]
   //  (Pures[T, A], Pures[T, A]) =>  ListF[QSP, (Pures[T, A], Pures[T, A], Pures[T, A]) \/ (Pures[T, A], Pures[T, A])]
-  def zipper[T[_[_]]]: ElgotCoalgebra[TriplePures[T] \/ ?, ListF[QScriptPure[T, Unit], ?], (DoubleFreeMap[T], DoublePures[T])] = {
+  def zipper[T[_[_]]: Corecursive](implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]): ElgotCoalgebra[TriplePures[T] \/ ?, ListF[QScriptPure[T, Unit], ?], (DoubleFreeMap[T], DoublePures[T])] = {
     case ((_, _), (Nil, Nil)) => (Nil, Nil, Nil).left
     case ((_, _), (Nil, r))   => (Nil, Nil, r).left
     case ((_, _), (l,   Nil)) => (Nil, l,   Nil).left
-    case ((lm, rm), (l :: ls, r :: rs)) => Mergeable[QScriptPure[T, Unit]].mergeSrcs(lm, rm, l, r).fold[TriplePures[T] \/ ListF[QScriptPure[T, Unit], (DoubleFreeMap[T], DoublePures[T])]]((Nil, l :: ls, r :: rs).left) { case AbsMerge(inn, lmf, rmf) => ConsF(inn, ((lmf, rmf), (ls, rs))).right[TriplePures[T]] }
+    case ((lm, rm), (l :: ls, r :: rs)) =>
+      ma.mergeSrcs(lm, rm, l, r).fold[TriplePures[T] \/ ListF[QScriptPure[T, Unit], (DoubleFreeMap[T], DoublePures[T])]]((Nil, l :: ls, r :: rs).left) { case AbsMerge(inn, lmf, rmf) => ConsF(inn, ((lmf, rmf), (ls, rs))).right[TriplePures[T]] }
   }
 
-  def merge[T[_[_]]: Recursive : Corecursive](left: Inner[T], right: Inner[T]): MergeJoin[T, Inner[T]] = {
+  def merge[T[_[_]]: Recursive : Corecursive](left: Inner[T], right: Inner[T])(implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]): MergeJoin[T, Inner[T]] = {
     val lLin: Pures[T, Unit] = left.cata(linearize).reverse
     val rLin: Pures[T, Unit] = right.cata(linearize).reverse
 
@@ -589,10 +625,9 @@ object Transform {
 
   // (implicit F: M ~> M[F]): Mergeable[T[F]]
 
-  // replaces Unit in `in` with `field`
   def merge2Map[T[_[_]]: Recursive: Corecursive](
       values: Func.Input[Inner[T], nat._2])(
-      func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]): QScriptPure[T, Inner[T]] = {
+      func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]])(implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]): QScriptPure[T, Inner[T]] = {
     
     val AbsMerge(merged, left, right) = merge(values(0), values(1))
     val res: Merge[T, Inner[T]] = makeBasicTheta(merged, left, right)
@@ -610,7 +645,7 @@ object Transform {
 
   def invokeMapping2[T[_[_]]: Recursive : Corecursive](
       func: BinaryFunc,
-      values: Func.Input[Inner[T], nat._2]): QScriptPure[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._2])(implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]): QScriptPure[T, Inner[T]] =
     func match {
       case structural.MakeObject => merge2Map(values)(MakeObject(_, _))
       case _ => ??? // TODO
@@ -659,7 +694,7 @@ object Transform {
   }
 
   def algebra[T[_[_]]: Recursive: Corecursive](
-      lp: LogicalPlan[Inner[T]]): QScriptPure[T, Inner[T]] =
+      lp: LogicalPlan[Inner[T]])(implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]): QScriptPure[T, Inner[T]] =
     lp match {
       case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
 
@@ -697,16 +732,11 @@ object Transform {
         G.inj(Drop(src, jb1, jb2))
 
       case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
-        val AbsMerge(src, fm1, fm2) = merge(a1, a2)
-        
-        makeBasicTheta(src, fm1, fm2) match {
+        val AbsMerge(src, jb1, jb2) = merge(a1, a2)
+
+        makeBasicTheta(src, jb1, jb2) match {
           case AbsMerge(src, fm1, fm2) =>
-            val (funcSrc, fm): (FreeMap[T], FreeMap[T]) = fm2.resume match {
-              case \/-(()) => (fm2, UnitF)
-              case -\/(Map(mapSrc, freeMap)) => (mapSrc, freeMap)
-              case -\/(qs) => (fm2, UnitF)
-            }
-            F.inj(Map(G.inj(Filter(src, rebase(fm, funcSrc))).embed, fm1))
+            F.inj(Map(G.inj(Filter(src, fm2)).embed, fm1))
         }
 
       //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Expansion => invokeLeftShift(func, input)
