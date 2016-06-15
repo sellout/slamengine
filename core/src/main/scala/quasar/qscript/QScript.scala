@@ -27,7 +27,7 @@ import matryoshka._, FunctorT.ops._, Recursive.ops._
 import matryoshka.patterns._
 import monocle.macros._
 import pathy.Path._
-import scalaz.{:+: => _, _}, Scalaz._, Inject._
+import scalaz.{:+: => _, _}, Scalaz._, Inject._, Leibniz._
 import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
 import simulacrum.typeclass
 
@@ -37,7 +37,7 @@ import simulacrum.typeclass
 // - each `Free` structure in a *Join or Union will have exactly one `point`
 // - the common source in a Join or Union will be the longest common branch
 // - all Reads have a Root (or another Read?) as their source
-// - in `Pathable`, the only `MapFunc` node allowed is a `ProjectField`
+// - in `Pathable`, the only `MapFunc` node allowed is a `ObjectProject`
 
 // TODO use real EJson when it lands in master
 sealed trait EJson[A]
@@ -418,7 +418,120 @@ object Transform {
   def H[T[_[_]]] = implicitly[ThetaJoin[T, ?] :<: QScriptPure[T, ?]]
 
   @typeclass trait Mergeable[A] {
-    def mergeSrcs[T[_[_]]](fm1: FreeMap[T], fm2: FreeMap[T], a1: A, a2: A): Option[Merge[T, A]]
+    def mergeSrcs[T[_[_]]: Corecursive](fm1: FreeMap[T], fm2: FreeMap[T], a1: A, a2: A): Option[Merge[T, A]]
+  }
+
+  // replace Unit in `in` with `field`
+  def rebase[T[_[_]]](in: FreeMap[T], field: FreeMap[T]): FreeMap[T] = in >> field
+
+  //implicit def mergeT[T[_[_]]: Recursive: Corecursive, F[_]: Functor](
+  //    implicit mf: Delay[Mergeable, F]): Mergeable[T[F]] = new Mergeable[T[F]] {
+  //  def mergeSrcs[IT[_[_]]](f1: T[F], f2: T[F]): Option[T[F]] =
+  //    mf(mergeT[T, F]).mergeSrcs(f1.project, f2.project).map(_.embed)
+  //}
+    // Const, ThetaJoin, DeadEnd
+
+  implicit def mergeConst[A: Mergeable]: Mergeable[Const[A, Unit]] = new Mergeable[Const[A, Unit]] {
+    def mergeSrcs[T[_[_]]: Corecursive](
+        left: FreeMap[T],
+        right: FreeMap[T],
+        p1: Const[A, Unit],
+        p2: Const[A, Unit]): Option[Merge[T, Const[A, Unit]]] =
+      Mergeable[A].mergeSrcs(left, right, p1.getConst, p2.getConst).map {
+        case AbsMerge(src, l, r) => AbsMerge(Const(src), l, r)
+      }
+  }
+
+  implicit def mergeDeadEnd: Mergeable[DeadEnd] = new Mergeable[DeadEnd] {
+    def mergeSrcs[T[_[_]]: Corecursive](
+        left: FreeMap[T],
+        right: FreeMap[T],
+        p1: DeadEnd,
+        p2: DeadEnd): Option[Merge[T, DeadEnd]] =
+      if (p1 === p2)
+        Some(AbsMerge[T, DeadEnd, FreeMap](p1, UnitF, UnitF))
+      else
+        None
+  }
+
+  implicit def mergeThetaJoin[T[_[_]]]: Mergeable[ThetaJoin[T, Unit]] = new Mergeable[ThetaJoin[T, Unit]] {
+    def mergeSrcs[T[_[_]]: Corecursive](
+        left: FreeMap[T],
+        right: FreeMap[T],
+        p1: ThetaJoin[T, Unit],
+        p2: ThetaJoin[T, Unit]): Option[Merge[T, ThetaJoin[T, Unit]]] =
+      if (p1 == p2)
+        Some(AbsMerge[T, ThetaJoin[T, Unit], FreeMap](p1, UnitF, UnitF))
+      else
+        None
+  }
+
+  def combineReduce(r1: ReduceFunc, r2: ReduceFunc): ReduceFunc = ???
+
+  implicit def mergeQScriptCore[T[_[_]]]: Mergeable[QScriptCore[T, Unit]] = new Mergeable[QScriptCore[T, Unit]] {
+    def mergeSrcs[IT[_[_]]: Corecursive](
+        left: FreeMap[T],
+        right: FreeMap[T],
+        p1: QScriptCore[T, Unit],
+        p2: QScriptCore[T, Unit]): Option[Merge[IT, QScriptCore[T, Unit]]] =
+      (p1, p2) match {
+        case (t1, t2) if t1 == t2 => AbsMerge[IT, QScriptCore[T, Unit], FreeMap](t1, UnitF, UnitF).some
+        case (Reduce(_, bucket1, func1), Reduce(_, bucket2, func2)) => {
+          val mapL = rebase(bucket1, left)
+          val mapR = rebase(bucket2, right)
+
+          if (mapL == mapR)
+            AbsMerge[IT, QScriptCore[T, Unit], FreeMap](Reduce((), mapL, combineReduce(func1, func2)), UnitF, UnitF).some
+          else
+            None
+        }
+        case (_, _) => None
+      }
+  }
+
+  implicit def mergeSourcedPathable[T[_[_]]: Corecursive]: Mergeable[SourcedPathable[T, Unit]] = new Mergeable[SourcedPathable[T, Unit]] {
+    def mergeSrcs[IT[_[_]]: Corecursive](left: FreeMap[IT], right: FreeMap[IT], p1: SourcedPathable[T, Unit], p2: SourcedPathable[T, Unit])(implicit ev: FreeMap[IT] === FreeMap[T]): Option[Merge[IT, SourcedPathable[T, Unit]]] =
+      (p1, p2) match {
+        case (Map(_, m1), Map(_, m2)) => {
+          val lf = 
+            Free.roll(ObjectProject[IT, FreeMap[IT]](UnitF, Free.roll[MapFunc[IT, ?], Unit](StrLit[IT, FreeMap[IT]]("tmp1"))))
+          val rf =
+            Free.roll(ObjectProject[IT, FreeMap[IT]](UnitF, Free.roll[MapFunc[IT, ?], Unit](StrLit[IT, FreeMap[IT]]("tmp2"))))
+          
+          AbsMerge[IT, SourcedPathable[T, Unit], FreeMap](Map((), Free.roll[MapFunc[T, ?], Unit](
+              ObjectConcat(
+                Free.roll[MapFunc[T, ?], Unit](MakeObject[T, FreeMap[T]](Free.roll(StrLit[T, FreeMap[T]]("tmp1")), rebase(m1, ev(left)))),
+                Free.roll[MapFunc[T, ?], Unit](MakeObject[T, FreeMap[T]](Free.roll(StrLit[T, FreeMap[T]]("tmp2")), rebase(m2, ev(right))))))),
+          lf, rf).some
+        }
+      }
+  }
+
+  // ObjectConcat(MakeObject(Literal("foo"), Literal(4), MakeObject(Literal("bar"), Literal(5))))
+  //
+  // ObjectConcat(Map(Root(), MakeObj), Map(Root(), MakeObj))
+  //
+  // l: [Root(), Map((), MakeObj)]
+  // r: [Root(), Map((), MakeObj)]
+  //
+  // Map(Root(), ObjConcat())]
+
+  implicit def mergeCoproduct[F[_], G[_]](
+      implicit mf: Mergeable[F[Unit]],
+               mg: Mergeable[G[Unit]]): Mergeable[Coproduct[F, G, Unit]] = new Mergeable[Coproduct[F, G, Unit]] {
+    def mergeSrcs[T[_[_]]: Corecursive](left: FreeMap[T], right: FreeMap[T], cp1: Coproduct[F, G, Unit], cp2: Coproduct[F, G, Unit]): Option[Merge[T, Coproduct[F, G, Unit]]] = {
+      (cp1.run, cp2.run) match {
+        case (-\/(left1), -\/(left2)) =>
+          mf.mergeSrcs(left, right, left1, left2).map {
+            case AbsMerge(src, left, right) => AbsMerge(Coproduct(-\/(src)), left, right)
+          }
+        case (\/-(right1), \/-(right2)) =>
+          mg.mergeSrcs(left, right, right1, right2).map {
+            case AbsMerge(src, left, right) => AbsMerge(Coproduct(\/-(src)), left, right)
+          }
+        case (-\/(left1), \/-(right2)) => None
+      }
+    }
   }
 
   def linearize[T[_[_]]](qs: QScriptPure[T, List[QScriptPure[T, Unit]]]): List[QScriptPure[T, Unit]] =
@@ -473,161 +586,39 @@ object Transform {
       foldIso(CoEnv.freeIso[Unit, QScriptPure[T, ?]]).get(rTail.reverse.ana[T, CoEnv[Unit, QScriptPure[T, ?], ?]](delinearizeJoinBranch >>> (CoEnv(_)))))
   }
 
-  // replace Unit in `in` with `field`
-  def rebase[T[_[_]]](in: FreeMap[T], field: FreeMap[T]): FreeMap[T] = in >> field
-
-  //implicit def mergeT[T[_[_]]: Recursive: Corecursive, F[_]: Functor](
-  //    implicit mf: Delay[Mergeable, F]): Mergeable[T[F]] = new Mergeable[T[F]] {
-  //  def mergeSrcs[IT[_[_]]](f1: T[F], f2: T[F]): Option[T[F]] =
-  //    mf(mergeT[T, F]).mergeSrcs(f1.project, f2.project).map(_.embed)
-  //}
-    // Const, ThetaJoin, DeadEnd
-
-  implicit def mergeConst[A: Mergeable]: Mergeable[Const[A, Unit]] = new Mergeable[Const[A, Unit]] {
-    def mergeSrcs[T[_[_]]](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: Const[A, Unit],
-        p2: Const[A, Unit]): Option[Merge[Const[A, Unit]]] =
-      Mergeable[A].mergeSrcs(left, right, p1.getConst, p2.getConst).map(Const(_))
-  }
-
-  implicit def mergeDeadEnd: Mergeable[DeadEnd] = new Mergeable[DeadEnd] {
-    def mergeSrcs[T[_[_]]](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: DeadEnd,
-        p2: DeadEnd): Option[Merge[DeadEnd]] =
-      if (p1 === p2)
-        Some(AbsMerge(p1, UnitF, UnitF))
-      else
-        None
-  }
-
-
-  implicit def mergeThetaJoin[T[_[_]]]: Mergeable[ThetaJoin[T, Unit]] = new Mergeable[ThetaJoin[T, Unit]] {
-    def mergeSrcs[T[_[_]]](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: ThetaJoin[T, Unit],
-        p2: ThetaJoin[T, Unit]): Option[Merge[ThetaJoin[T, Unit]]] =
-      if (p1 == p2)
-        Some(AbsMerge(p1, UnitF, UnitF))
-      else
-        None
-  }
-
-  implicit def mergeQScriptCore[T[_[_]]]: Mergeable[QScriptCore[T, Unit]] = new Mergeable[QScriptCore[T, Unit]] {
-    def mergeSrcs[T[_[_]]](
-        left: FreeMap[T],
-        right: FreeMap[T],
-        p1: QScriptCore[T, Unit],
-        p2: QScriptCore[T, Unit]): Option[Merge[QScriptCore[T, Unit]]] =
-      (p1, p2) match {
-        case (t1, t2) if t1 == t2 => t1.some
-        case (Reduce(_, bucket1, func1), Reduce(_, bucket2, func2)) => {
-          val mapL = rebase(bucket1, left)
-          val mapR = rebase(bucket2, right)
-
-          if (mapL == mapR)
-            Reduce((), mapL, combineReduce(func1, func2)).some
-          else
-            None
-        }
-        case (_, _) => None
-      }
-  }
-
-  implicit def mergeSourcedPathable[T[_[_]]]: Mergeable[SourcedPathable[T, Unit]] = new Mergeable[SourcedPathable[T, Unit]] {
-    def mergeSrcs[T[_[_]]](left: FreeMap[T], right: FreeMap[T], p1: SourcedPathable[T, Unit], p2: SourcedPathable[T, Unit]): Option[Merge[SourcedPathable[T, Unit]]] =
-      (p1, p2) match {
-        case (Map(_, m1), Map(_, m2)) => {
-          val lf = 
-            Free.roll(ProjectField(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]]("tmp1"))))
-          val rf =
-            Free.roll(ProjectField(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]]("tmp2"))))
-          
-          Merge(Map((), Free.roll[MapFunc[T, ?], Unit](
-              ObjectConcat(
-                Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp1")), rebase(m1, left))),
-                Free.roll[MapFunc[T, ?], Unit](MakeObject(Free.roll(StrLit[T, FreeMap[T]]("tmp2")), rebase(m2, right)))))),
-          lf, rf).some
-        }
-      }
-  }
-
-  // ObjectConcat(MakeObject(Literal("foo"), Literal(4), MakeObject(Literal("bar"), Literal(5))))
-  //
-  // ObjectConcat(Map(Root(), MakeObj), Map(Root(), MakeObj))
-  //
-  // l: [Root(), Map((), MakeObj)]
-  // r: [Root(), Map((), MakeObj)]
-  //
-  // Map(Root(), ObjConcat())]
-
-  implicit def mergeCoproduct[F[_], G[_]](
-      implicit mf: Mergeable[F[Unit]],
-               mg: Mergeable[G[Unit]]): Mergeable[Coproduct[F, G, Unit]] = new Mergeable[Coproduct[F, G, Unit]] {
-    def mergeSrcs[T[_[_]]](left: FreeMap[T], right: FreeMap[T], cp1: Coproduct[F, G, Unit], cp2: Coproduct[F, G, Unit]): Merge[T, Coproduct[F, G, Unit]] = {
-      (cp1.run, cp2.run) match {
-        case (-\/(left1), -\/(left2)) =>
-          mf.mergeSrcs(left, right, left1, left2).map {
-            case Merge(src, left, right) => Merge(Coproduct(-\/(src)), left, right)
-          }
-        case (\/-(right1), \/-(right2)) =>
-          mf.mergeSrcs(left, right, right1, right2).map {
-            case Merge(src, left, right) => Merge(Coproduct(\/-(src)), left, right)
-          }
-        case (-\/(left1), \/-(right2)) => None
-      }
-    }
-  }
-
   // (implicit F: M ~> M[F]): Mergeable[T[F]]
 
   // replaces Unit in `in` with `field`
-  def merge2Map[T[_[_]]: Recursive: Corecursive, A](
+  def merge2Map[T[_[_]]: Recursive: Corecursive](
       values: Func.Input[Inner[T], nat._2])(
-      func: (A, A) => MapFunc[T, A]): QScript[T, A] = {  // returns Pathable?
+      func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]): QScriptPure[T, Inner[T]] = {
+    
+    val AbsMerge(merged, left, right) = merge(values(0), values(1))
+    val res: Merge[T, Inner[T]] = makeBasicTheta(merged, left, right)
 
-    val Merge(left, right, merged) = Mergeable[Inner[T]].mergeSrcs(values(0), values(1))
-
-    val rewrittenFunc: MapFunc[T, FreeMap[T]] = (left, right) match {
-      case (Some(lname), Some(rname)) =>
-        func(
-          Free.roll[MapFunc[T, ?], Unit](ObjectProject(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]](lname)))),
-          Free.roll[MapFunc[T, ?], Unit](ObjectProject(UnitF, Free.roll[MapFunc[T, ?], Unit](StrLit[T, FreeMap[T]](rname)))))
-      case (None, Some(rname)) =>
-        func(UnitF, ObjectProject(UnitF, Free.roll(StrLit(rname))))
-      case (Some(lname), None) =>
-        func(ObjectProject(UnitF, Free.roll(StrLit(lname))), UnitF)
-      case (None, None) =>
-        func(UnitF, UnitF)
-    }
-    Map(merged, Free.roll(rewrittenFunc))
+    F.inj(Map(res.src, Free.roll(func(res.left, res.right))))
   }
 
   def invokeMapping1[T[_[_]]](
       func: UnaryFunc,  // UnaryMapping
-      values: Func.Input[Inner[T], nat._1]): QScript[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._1]): QScriptPure[T, Inner[T]] =
     func match {
       case structural.MakeArray => F.inj(Map(values(0), Free.roll(MakeArray(UnitF))))
       case _ => ??? // TODO
     }
 
-  def invokeMapping1[T[_[_]]](
-      func: UnaryFunc,  // UnaryMapping
-      values: Func.Input[Inner[T], nat._1]): QScript[T, Inner[T]] =
-    func match {
-      case structural.MakeArray => F.inj(Map(values(0), Free.roll(MakeArray(UnitF))))
-      case _ => ??? // TODO
-    }
-
-  def invokeMapping2[T[_[_]]](
+  def invokeMapping2[T[_[_]]: Recursive : Corecursive](
       func: BinaryFunc,
-      values: Func.Input[Inner[T], nat._2]): QScript[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._2]): QScriptPure[T, Inner[T]] =
     func match {
-      case structural.MakeObject => merge2Map(values, MakeObject(_, _))
+      case structural.MakeObject => merge2Map(values)(MakeObject(_, _))
+      case _ => ??? // TODO
+    }
+
+  def invokeMapping3[T[_[_]]: Recursive : Corecursive](
+      func: TernaryFunc,
+      values: Func.Input[Inner[T], nat._3]): QScriptPure[T, Inner[T]] =
+    func match {
       case _ => ??? // TODO
     }
 
@@ -638,7 +629,7 @@ object Transform {
   // this involves changing how DimensionalEffect is assigned (algebra rather than parameter)
   def invokeReduction1[T[_[_]]](
       func: UnaryFunc,
-      values: Func.Input[Inner[T], nat._1]): QScript[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._1]): QScriptPure[T, Inner[T]] =
     func match {
       case agg.Count     => G.inj(Reduce(values(0), UnitF, Count))
       case agg.Sum       => G.inj(Reduce(values(0), UnitF, Sum))
@@ -654,11 +645,16 @@ object Transform {
     src: A,
     lBranch: JoinBranch[T],
     rBranch: JoinBranch[T]): ThetaJoin[T, A] =
-      ThetaJoin(on, f, src, lBranch, rBranch, lName, rName)
+      ThetaJoin(on, f, src, lBranch, rBranch, "foo", "bar")  // TODO
 
-  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch, right: JoinBranch[T]): Merge[T, Inner[T]] = {
-    val src = constructTheta(basicJF, baseJT, src, left, right)
-    Merge(src.embed, Free.roll(ObjectProject(UnitF, src.lName)), Free.roll(ObjectProject(UnitF, src.rName)))
+  def basicJF[T[_[_]]]: JoinFunc[T] = ???
+
+  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch[T], right: JoinBranch[T]): Merge[T, Inner[T]] = {
+    val newSrc: ThetaJoin[T, Inner[T]] = constructTheta(basicJF, Inner, src, left, right)
+    AbsMerge[T, Inner[T], FreeMap](
+      H.inj(newSrc).embed,
+      Free.roll(ObjectProject(UnitF, Free.roll(Nullary(EJson.Str[T[EJson]](newSrc.lName).embed)))),
+      Free.roll(ObjectProject(UnitF, Free.roll(Nullary(EJson.Str[T[EJson]](newSrc.rName).embed)))))
   }
 
   def algebra[T[_[_]]: Recursive: Corecursive](
@@ -667,11 +663,11 @@ object Transform {
       case LogicalPlan.ReadF(path) => ??? // nested ObjectProject
 
       case LogicalPlan.ConstantF(data) => F.inj(Map(
-        E.inj(Const(Root)).embed,
+        E[T].inj(Const[DeadEnd, Inner[T]](Root)).embed,
         Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data)))))
 
       case LogicalPlan.FreeF(name) => F.inj(Map(
-        E.inj(Const(Empty)).embed,
+        E[T].inj(Const[DeadEnd, Inner[T]](Empty)).embed,
         Free.roll(ObjectProjectFree(Free.roll(StrLit(name.toString)), UnitF))))
 
       case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
@@ -680,35 +676,36 @@ object Transform {
       // TODO this illustrates the untypesafe ugliness b/c the pattern match does not guarantee the appropriate sized `Sized`
       // https://github.com/milessabin/shapeless/pull/187
       case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Mapping =>
-        invokeMapping1(func, Func.Input1(a1))(F)
+        invokeMapping1(func, Func.Input1(a1))
 
       case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Mapping =>
-        invokeMapping2(func, Func.Input2(a1, a2))(F)
+        invokeMapping2(func, Func.Input2(a1, a2))
 
-      case LogicalPlan.InvokeF(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) if func.effect == Mapping =>
+      case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) if func.effect == Mapping =>
         invokeMapping3(func, Func.Input3(a1, a2, a3))
 
       case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Reduction =>
-        invokeReduction1(func, Func.Input1(a1))(G)
+        invokeReduction1(func, Func.Input1(a1))
 
-      case LogicalPlan.InvokeFUnapply(Take, Sized(a1, a2)) =>
-        val Merge(src, jb1, jb2) = Mergeable[Inner[T]].mergeSrcs(a1, a2) //Merge(Inner[T], JoinB[T], JoinB[T])
+      case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
+        val AbsMerge(src, jb1, jb2) = merge(a1, a2)
         G.inj(Take(src, jb1, jb2))
 
-      case LogicalPlan.InvokeFUnapply(Drop, Sized(a1, a2)) =>
-        val Merge(src, jb1, jb2) = Mergeable[Inner[T]].mergeSrcs(a1, a2) //Merge(Inner[T], JoinB[T], JoinB[T])
+      case LogicalPlan.InvokeFUnapply(set.Drop, Sized(a1, a2)) =>
+        val AbsMerge(src, jb1, jb2) = merge(a1, a2)
         G.inj(Drop(src, jb1, jb2))
 
-      case LogicalPlan.InvokeFUnapply(Filter, Sized(a1, a2)) =>
-        mergeSrcs(a1, a2) match {
-          case Merge(src, fm1, fm2) =>
-            val (funcSrc, fm) = fm2.resume match {
-              case -\/(()) => (fm2, UnitF)
-              case \/-(Map(mapSrc, freeMap)) => (mapSrc, freeMap)
-              case \/-(qs) => (fm2, UnitF)
+      case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
+        val AbsMerge(src, fm1, fm2) = merge(a1, a2)
+        
+        makeBasicTheta(src, fm1, fm2) match {
+          case AbsMerge(src, fm1, fm2) =>
+            val (funcSrc, fm): (FreeMap[T], FreeMap[T]) = fm2.resume match {
+              case \/-(()) => (fm2, UnitF)
+              case -\/(Map(mapSrc, freeMap)) => (mapSrc, freeMap)
+              case -\/(qs) => (fm2, UnitF)
             }
-            // Filter(makeBasicTheta(src, fm1, funcSrc), fm)
-            F.inj(Map(Filter(src, rebase(fm, funcSrc)), fm1))
+            F.inj(Map(G.inj(Filter(src, rebase(fm, funcSrc))).embed, fm1))
         }
 
       //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Expansion => invokeLeftShift(func, input)
