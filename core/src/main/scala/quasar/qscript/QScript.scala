@@ -268,6 +268,7 @@ object QScriptCore {
     }
 }
 
+// TODO can only have a single source
 final case class PatternGuard[T[_[_]], A](src: A, typ: Type, cont: A, fallback: A)
     extends QScriptCore[T, A]
 
