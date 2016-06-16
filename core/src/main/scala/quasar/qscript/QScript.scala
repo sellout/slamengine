@@ -713,13 +713,18 @@ object Transform {
     F.inj(Map(res.src, Free.roll(func(res.left, res.right))))
   }
 
+  def wrapUnary[T[_[_]]](func: Unary[T, FreeMap[T]])(value: Inner[T]): QScriptPure[T, Inner[T]] =
+    F.inj(Map(value, Free.roll(func)))
+
   def invokeMapping1[T[_[_]]](
-      func: UnaryFunc,  // UnaryMapping
-      values: Func.Input[Inner[T], nat._1]): QScriptPure[T, Inner[T]] =
-    func match {
-      case structural.MakeArray => F.inj(Map(values(0), Free.roll(MakeArray(UnitF))))
+      func: UnaryFunc,
+      values: Func.Input[Inner[T], nat._1]): QScriptPure[T, Inner[T]] = {
+    val unary: Unary[T, FreeMap[T]] = func match {
+      case structural.MakeArray => MakeArray(UnitF)
       case _ => ??? // TODO
     }
+    wrapUnary(unary)(values(0))
+  }
 
   def invokeMapping2[T[_[_]]: Recursive : Corecursive](
       func: BinaryFunc,
