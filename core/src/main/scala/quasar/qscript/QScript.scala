@@ -223,7 +223,25 @@ final case class Map[T[_[_]], A](src: A, f: FreeMap[T]) extends SourcedPathable[
 /** Zooms in one level on the data, turning each map or array into a set of
   * values. Other data types become undefined.
   */
+
+ //{ ts: 2016.01... }
+ //{ ts: "2016-..." }
+ //...
+
+ // /foo/bar/baz: { date: ___, time: ___ }
+ // /foo/bar/baz: { 1: 2016 }
+ // TIMESTAMP(OP((), date) || OP((), time))
+
+
+ // select [quux, timestamp(date, time){*}] from `/foo/bar/baz`
+ //
+ // { quux: ???, 1: "2016" } 
+ // { quux: ???, 1: "05" } 
+ //
+ // /foo/bar/baz: 
+
 final case class LeftShift[T[_[_]], A](src: A) extends SourcedPathable[T, A]
+//final case class LeftShift[T[_[_]], A](src: A, f: FreeMap[T], jf: JoinFunc[T]) extends SourcedPathable[T, A]
 
 /** Creates a new dataset, |a|+|b|, containing all of the entries from each of
   * the input sets, without any indication of which set they came from
