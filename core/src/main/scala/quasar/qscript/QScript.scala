@@ -721,6 +721,24 @@ object Transform {
     F.inj(Map(res.src, Free.roll(func(res.left, res.right))))
   }
 
+  def merge3Map[T[_[_]]: Recursive: Corecursive](
+    values: Func.Input[Inner[T], nat._3])(
+    func: (FreeMap[T], FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]])(
+    implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]):
+      QScriptPure[T, Inner[T]] = {
+
+    val AbsMerge(merged, first, second) = merge(values(0), values(1))
+    val AbsMerge(merged2, fands, third) = merge(merged, values(2))
+
+    val res: Merge[T, Inner[T]] = makeBasicTheta(merged2, first, second)
+    val res2 = makeBasicTheta(res.src, fands, third)
+
+    F.inj(Map(res2.src, Free.roll(func(
+      rebase(res2.left, res.left),
+      rebase(res2.left, res.right),
+      res2.right))))
+  }
+
   def wrapUnary[T[_[_]]](func: Unary[T, FreeMap[T]])(value: Inner[T]): QScriptPure[T, Inner[T]] =
     F.inj(Map(value, Free.roll(func)))
 
