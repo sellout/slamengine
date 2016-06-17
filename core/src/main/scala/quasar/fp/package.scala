@@ -543,6 +543,15 @@ package object fp
       })
   }
 
+  implicit def freeShow[F[_]: Functor](implicit F: Delay[Show, F]): Delay[Show, Free[F, ?]] =
+    new Delay[Show, Free[F, ?]] {
+      def apply[α](sh: Show[α]): Show[Free[F, α]] =
+        Show.show(_.resume match {
+          case -\/(branch) => Cord("Roll(") ++ F(freeShow[F].apply(sh)).show(branch) ++ Cord(")") //F[Free[F, A]]
+          case \/-(leaf) => Cord("Point(") ++ sh.show(leaf) ++ Cord(")")
+        })
+    }
+
   implicit def constEqual[A: Equal]: Delay[Equal, Const[A, ?]] = new Delay[Equal, Const[A, ?]] {
     def apply[B](eq: Equal[B]): Equal[Const[A, B]] =
       Equal.equal((c1, c2) => c1.getConst === c2.getConst)

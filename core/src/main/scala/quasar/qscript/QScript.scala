@@ -58,6 +58,13 @@ object EJson {
   implicit def functor: Functor[EJson] = new Functor[EJson] {
     def map[A, B](fa: EJson[A])(f: A => B): EJson[B] = Null[B]()
   }
+
+  implicit def show: Delay[Show, EJson] = new Delay[Show, EJson] {
+    def apply[A](sh: Show[A]): Show[EJson[A]] = Show.show {
+      case Null() => Cord("Null()")
+      case Str(str) => Cord(s"Str($str)")
+    }
+  }
 }
 
 object DataLevelOps {
@@ -88,6 +95,16 @@ object DataLevelOps {
           case Ternary(a1, a2, a3) => Ternary(f(a1), f(a2), f(a3))
         }
     }
+
+    implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
+      new Delay[Show, MapFunc[T, ?]] {
+        def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
+          case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
+          case Unary(a1) => Cord("Unary(") ++ sh.show(a1) ++ Cord(")")
+          case Binary(a1, a2) => Cord("Binary(") ++ sh.show(a1) ++ sh.show(a2) ++ Cord(")")
+          case Ternary(a1, a2, a3) => Cord("Ternary(") ++ sh.show(a1) ++ sh.show(a2) ++ sh.show(a3) ++ Cord(")")
+        }
+      }
   }
 
   // TODO this should be found from matryoshka - why isn't it being found!?!?
@@ -243,10 +260,12 @@ object SourcedPathable {
         }
     }
 
-  implicit def show[T[_[_]]]: Delay[Show, SourcedPathable[T, ?]] =
+  implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, SourcedPathable[T, ?]] =
     new Delay[Show, SourcedPathable[T, ?]] {
-      def apply[A](s: Show[A]): Show[SourcedPathable[T, A]] =
-        Show.showFromToString[SourcedPathable[T, A]]
+      def apply[A](s: Show[A]): Show[SourcedPathable[T, A]] = Show.show(_ match {
+        case Map(src, mf) => Cord("Map(") ++ s.show(src) ++ Cord(",") ++ Show[FreeMap[T]].show(mf) ++ Cord(")")
+        case _ => Cord("some other sourced pathable sorry")
+      })
     }
 }
 

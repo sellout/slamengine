@@ -79,7 +79,7 @@ class QScriptSpec extends Specification with ScalazMatchers {
 
   "replan" should {
     "convert a very simple read" in {
-      callIt(quasar.LogicalPlan.Read(file("/"))) must
+      callIt(quasar.LogicalPlan.Read(file("/"))) must// equal (callIt(quasar.LogicalPlan.Read(file("/"))))
       equal(RootR)
     }
 
