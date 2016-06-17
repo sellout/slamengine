@@ -477,16 +477,13 @@ object ThetaJoin {
         f(fa.src) ∘ (ThetaJoin(_, fa.lBranch, fa.rBranch, fa.on, fa.f, fa.combine))
     }
 
-  implicitly[Show[JoinBranch[Fix]]]
-  implicitly[Show[JoinFunc[Fix]]]
-  implicitly[Show[Fix[EJson]]]
 
-  implicit def show[T[_[_]]: Recursive : Corecursive](implicit s: Show[T[EJson]]): Delay[Show, ThetaJoin[T, ?]] =
+  implicit def show[T[_[_]]: Recursive](implicit s: Show[T[EJson]]): Delay[Show, ThetaJoin[T, ?]] =
     new Delay[Show, ThetaJoin[T, ?]] {
-      def apply[A](s: Show[A]): Show[ThetaJoin[T, A]] = Show.show {
+      def apply[A](showA: Show[A]): Show[ThetaJoin[T, A]] = Show.show {
         case ThetaJoin(src, lBr, rBr, on, f, combine) =>
           Cord("ThetaJoin(") ++
-          s.show(src) ++ Cord(",") ++
+          showA.show(src) ++ Cord(",") ++
           Show[JoinBranch[T]].show(lBr) ++ Cord(",") ++
           Show[JoinBranch[T]].show(rBr) ++ Cord(",") ++
           Show[JoinFunc[T]].show(on) ++ Cord(",") ++
