@@ -19,6 +19,7 @@ package quasar.qscript
 import quasar.Predef._
 import quasar.LogicalPlan
 import quasar.fp._
+import quasar.fs._
 
 import matryoshka._, FunctorT.ops._
 import org.specs2.mutable._
@@ -79,13 +80,13 @@ class QScriptSpec extends Specification with ScalazMatchers {
 
   "replan" should {
     "convert a very simple read" in {
-      callIt(quasar.LogicalPlan.Read(file("/"))) must// equal (callIt(quasar.LogicalPlan.Read(file("/"))))
-      equal(RootR)
+      callIt(quasar.LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile("/foo").get))) must// equal (callIt(quasar.LogicalPlan.Read(file("/"))))
+      equal(
+        F.inj(Map(RootR, ObjectProjectR(UnitF, StrR("foo")))).embed)
     }
 
     "convert a simple read" in {
-      callIt(quasar.LogicalPlan.Read(file("/some/foo/bar"))) must
-      //equal(RootR)
+      callIt(quasar.LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile("/some/foo/bar").get))) must
       equal(
         F[Fix].inj(
           Map[Fix, Inner[Fix]](RootR,
