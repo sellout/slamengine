@@ -20,6 +20,7 @@ import quasar.Predef._
 import quasar.LogicalPlan
 import quasar.fp._
 import quasar.fs._
+import quasar.std.StdLib._
 
 import matryoshka._, FunctorT.ops._
 import org.specs2.mutable._
@@ -34,10 +35,6 @@ class QScriptSpec extends Specification with ScalazMatchers {
   import MapFuncs._
   import Transform._
 
-  import scala.Predef.implicitly
-
-  implicit val ma: Mergeable.Aux[Fix, QScriptPure[Fix, Unit]] = scala.Predef.implicitly
-
   def callIt(lp: Fix[LogicalPlan]): Inner[Fix] = lp.transCata(lpToQScript[Fix]).transCata(liftQSAlgebra(elideNopMaps[Fix, QScriptPure[Fix, ?]]))
 
   def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner[Fix]](Root))).embed
@@ -48,61 +45,40 @@ class QScriptSpec extends Specification with ScalazMatchers {
   def StrR[A](s: String): Free[MapFunc[Fix, ?], A] =
     Free.roll(StrLit[Fix, Free[MapFunc[Fix, ?], A]](s))
 
-  //Equal[Fix[QScriptPure[Fix, ?]]]
-
-  implicitly[Equal[Unit]]
-  implicitly[Equal[DeadEnd]]
-  implicitly[Equal[Const[DeadEnd, Unit]]]
-  implicitly[Equal[Fix[Const[DeadEnd, ?]]]]
-  implicitly[Delay[Equal, ThetaJoin[Fix, ?]]]
-  implicitly[Equal[ThetaJoin[Fix, Unit]]]
-  implicitly[Equal[QScriptCore[Fix, Unit]]]
-  implicitly[Equal[SourcedPathable[Fix, Unit]]]
-  implicitly[Equal[Pathable[Fix, Unit]]]
-  implicitly[Equal[QScriptPrim[Fix, Unit]]]
-  implicitly[Equal[QScriptPure[Fix, Unit]]]
-  implicitly[Equal[Fix[QScriptPure[Fix, ?]]]]
-
-  implicitly[Show[Unit]]
-  implicitly[Show[DeadEnd]]
-  implicitly[Show[Const[DeadEnd, Unit]]]
-  implicitly[Show[Fix[Const[DeadEnd, ?]]]]
-  implicitly[Delay[Show, ThetaJoin[Fix, ?]]]
-  implicitly[Show[ThetaJoin[Fix, Unit]]]
-  implicitly[Show[QScriptCore[Fix, Unit]]]
-  implicitly[Show[SourcedPathable[Fix, Unit]]]
-  implicitly[Show[Pathable[Fix, Unit]]]
-  implicitly[Show[QScriptPrim[Fix, Unit]]]
-  implicitly[Show[QScriptPure[Fix, Unit]]]
-  implicitly[Show[Fix[QScriptPure[Fix, ?]]]]
-
-  //val z = callIt(quasar.LogicalPlan.Read(file("/some/foo/bar")))
+  def lpRead(path: String): Fix[LogicalPlan] =
+    LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile(path).get))
 
   "replan" should {
     "convert a very simple read" in {
-      callIt(quasar.LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile("/foo").get))) must// equal (callIt(quasar.LogicalPlan.Read(file("/"))))
+      callIt(lpRead("/foo")) must
       equal(
         F.inj(Map(RootR, ObjectProjectR(UnitF, StrR("foo")))).embed)
     }
 
     "convert a simple read" in {
-      callIt(quasar.LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile("/some/foo/bar").get))) must
+      callIt(lpRead("/some/foo/bar")) must
       equal(
-        F[Fix].inj(
-          Map[Fix, Inner[Fix]](RootR,
-            ObjectProjectR[Unit](
-              ObjectProjectR[Unit](
-                ObjectProjectR[Unit](
-                  UnitF[Fix],
-                  StrR[Unit]("some")),
-                StrR[Unit]("foo")),
-              StrR[Unit]("bar")))).embed)(Fix.equal(
-                coproductEqual(
-                  ThetaJoin.equal,
-                  coproductEqual(
-                    QScriptCore.equal, implicitly[Delay[Equal, Pathable[Fix, ?]]]))), implicitly[Show[Fix[QScriptPure[Fix, ?]]]])
+        F.inj(
+          Map(RootR,
+            ObjectProjectR(
+              ObjectProjectR(
+                ObjectProjectR(
+                  UnitF,
+                  StrR("some")),
+                StrR("foo")),
+              StrR("bar")))).embed)
 
       // Map(Root, ObjectProject(ObjectProject(ObjectProject((), "some"), "foo"), "bar"))
+    }
+
+    "convert a basic invoke" in {
+      callIt(math.Add(lpRead("/foo"), lpRead("/bar")).embed) must
+      equal(
+        F.inj(
+          Map(RootR,
+            Free.roll(Add[Fix, FreeMap[Fix]](
+              ObjectProjectR(UnitF, StrR("/foo")),
+              ObjectProjectR(UnitF, StrR("/bar")))))).embed)
     }
   }
 }
