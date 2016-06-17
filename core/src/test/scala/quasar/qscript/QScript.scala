@@ -35,7 +35,11 @@ class QScriptSpec extends Specification with ScalazMatchers {
   import MapFuncs._
   import Transform._
 
-  def callIt(lp: Fix[LogicalPlan]): Inner[Fix] = lp.transCata(lpToQScript[Fix]).transCata(liftQSAlgebra(elideNopMaps[Fix, QScriptPure[Fix, ?]]))
+  def callIt(lp: Fix[LogicalPlan]): Inner[Fix] =
+    lp.transCata(lpToQScript[Fix])
+       .transCata(liftQSAlgebra(elideNopJoins[Fix, QScriptPure[Fix, ?]]))
+       .transCata(liftQSAlgebra(elideNopMaps[Fix, QScriptPure[Fix, ?]]))
+       .transCata(liftQSAlgebra2(coalesceMap[Fix, QScriptPure[Fix, ?]]))
 
   def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner[Fix]](Root))).embed
 
@@ -77,8 +81,8 @@ class QScriptSpec extends Specification with ScalazMatchers {
         F.inj(
           Map(RootR,
             Free.roll(Add[Fix, FreeMap[Fix]](
-              ObjectProjectR(UnitF, StrR("/foo")),
-              ObjectProjectR(UnitF, StrR("/bar")))))).embed)
+              ObjectProjectR(UnitF, StrR("foo")),
+              ObjectProjectR(UnitF, StrR("bar")))))).embed)
     }
   }
 }

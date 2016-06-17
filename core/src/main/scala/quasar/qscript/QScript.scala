@@ -869,9 +869,24 @@ object Transform {
     case x => Th.inj(x)
   }
 
+  // TODO write extractor for inject
+  def coalesceMap[T[_[_]]: Recursive, F[_]: Functor](implicit SP: SourcedPathable[T, ?] :<: F):
+      SourcedPathable[T, T[F]] => SourcedPathable[T, T[F]] = {
+    case x @ Map(Embed(src), mf) => SP.prj(src) match {
+      case Some(Map(srcInner, mfInner)) => Map(srcInner, rebase(mf, mfInner))
+      case _ => x
+    }
+    case x => x
+  }
+
   def liftQSAlgebra[T[_[_]], F[_], G[_]](orig: G[T[F]] => F[T[F]])(
     implicit G: G :<: F): (F[T[F]] => F[T[F]]) = ftf => {
       G.prj(ftf).fold(ftf)(orig) //Option[ThetaJoin[T, T[F]]]
+    }
+
+  def liftQSAlgebra2[T[_[_]], F[_], G[_]](orig: G[T[F]] => G[T[F]])(
+    implicit G: G :<: F): (F[T[F]] => F[T[F]]) = ftf => {
+      G.prj(ftf).fold(ftf)(orig.andThen(G.inj))
     }
 
   def pathToProj[T[_[_]]: Corecursive](path: pathy.Path[_, _, _]): FreeMap[T] =
