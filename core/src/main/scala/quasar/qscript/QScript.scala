@@ -245,6 +245,12 @@ object SourcedPathable {
           case Union(a, l, r)     => f(a) ∘ (Union(_, l, r))
         }
     }
+
+  implicit def show[T[_[_]]]: Delay[Show, SourcedPathable[T, ?]] =
+    new Delay[Show, SourcedPathable[T, ?]] {
+      def apply[A](s: Show[A]): Show[SourcedPathable[T, A]] =
+        Show.showFromToString[SourcedPathable[T, A]]
+    }
 }
 
 object DeadEnd {
@@ -252,6 +258,7 @@ object DeadEnd {
   //scala.Predef.implicitly[FreeMap[Fix]]
 
   implicit def equal: Equal[DeadEnd] = Equal.equalRef
+  implicit def show: Show[DeadEnd] = Show.showFromToString[DeadEnd]
 }
 
 /** The top level of a filesystem. During compilation this represents `/`, but
@@ -338,6 +345,12 @@ object QScriptCore {
           case Filter(a, func)            => f(a) ∘ (Filter(_, func))
           case _                          => ???
         }
+    }
+
+  implicit def show[T[_[_]]]: Delay[Show, QScriptCore[T, ?]] =
+    new Delay[Show, QScriptCore[T, ?]] {
+      def apply[A](s: Show[A]): Show[QScriptCore[T, A]] =
+        Show.showFromToString[QScriptCore[T, A]]
     }
 }
 
@@ -442,6 +455,12 @@ object ThetaJoin {
         fa: ThetaJoin[T, A])(
         f: A => G[B]) =
         f(fa.src) ∘ (ThetaJoin(_, fa.lBranch, fa.rBranch, fa.on, fa.f, fa.combine))
+    }
+
+  implicit def show[T[_[_]]]: Delay[Show, ThetaJoin[T, ?]] =
+    new Delay[Show, ThetaJoin[T, ?]] {
+      def apply[A](s: Show[A]): Show[ThetaJoin[T, A]] =
+        Show.showFromToString[ThetaJoin[T, A]]
     }
 }
 

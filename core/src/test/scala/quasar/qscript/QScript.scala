@@ -18,18 +18,22 @@ package quasar.qscript
 
 import quasar.Predef._
 import quasar.LogicalPlan
+import quasar.fp._
 
 import matryoshka._, FunctorT.ops._
 import org.specs2.mutable._
 import org.specs2.scalaz._
 import pathy.Path._
-import shapeless.contrib.scalaz.instances._
+//import shapeless.contrib.scalaz.instances.deriveEqual
 import scalaz._
+import Scalaz._
 
 class QScriptSpec extends Specification with ScalazMatchers {
   import DataLevelOps._
   import MapFuncs._
   import Transform._
+
+  import scala.Predef.implicitly
 
   implicit val ma: Mergeable.Aux[Fix, QScriptPure[Fix, Unit]] = scala.Predef.implicitly
 
@@ -43,15 +47,50 @@ class QScriptSpec extends Specification with ScalazMatchers {
   def StrR[A](s: String): Free[MapFunc[Fix, ?], A] =
     Free.roll(StrLit[Fix, Free[MapFunc[Fix, ?], A]](s))
 
+  //Equal[Fix[QScriptPure[Fix, ?]]]
+
+  implicitly[Equal[Unit]]
+  implicitly[Equal[DeadEnd]]
+  implicitly[Equal[Const[DeadEnd, Unit]]]
+  implicitly[Equal[Fix[Const[DeadEnd, ?]]]]
+  implicitly[Delay[Equal, ThetaJoin[Fix, ?]]]
+  implicitly[Equal[ThetaJoin[Fix, Unit]]]
+  implicitly[Equal[QScriptCore[Fix, Unit]]]
+  implicitly[Equal[SourcedPathable[Fix, Unit]]]
+  implicitly[Equal[Pathable[Fix, Unit]]]
+  implicitly[Equal[QScriptPrim[Fix, Unit]]]
+  implicitly[Equal[QScriptPure[Fix, Unit]]]
+  implicitly[Equal[Fix[QScriptPure[Fix, ?]]]]
+
+  implicitly[Show[Unit]]
+  implicitly[Show[DeadEnd]]
+  implicitly[Show[Const[DeadEnd, Unit]]]
+  implicitly[Show[Fix[Const[DeadEnd, ?]]]]
+  implicitly[Delay[Show, ThetaJoin[Fix, ?]]]
+  implicitly[Show[ThetaJoin[Fix, Unit]]]
+  implicitly[Show[QScriptCore[Fix, Unit]]]
+  implicitly[Show[SourcedPathable[Fix, Unit]]]
+  implicitly[Show[Pathable[Fix, Unit]]]
+  implicitly[Show[QScriptPrim[Fix, Unit]]]
+  implicitly[Show[QScriptPure[Fix, Unit]]]
+  implicitly[Show[Fix[QScriptPure[Fix, ?]]]]
+
+  //val z = callIt(quasar.LogicalPlan.Read(file("/some/foo/bar")))
+
   "replan" should {
     "convert a simple read" in {
       callIt(quasar.LogicalPlan.Read(file("/some/foo/bar"))) must
+      //equal(RootR)
       equal(
-        F.inj(
-          Map(RootR,
-            ObjectProjectR(ObjectProjectR(ObjectProjectR(UnitF, StrR("some")),
-                                          StrR("foo")),
-                           StrR("bar")))))
+        F[Fix].inj(
+          Map[Fix, Inner[Fix]](RootR,
+            ObjectProjectR[Unit](
+              ObjectProjectR[Unit](
+                ObjectProjectR[Unit](
+                  UnitF[Fix],
+                  StrR[Unit]("some")),
+                StrR[Unit]("foo")),
+              StrR[Unit]("bar")))).embed)
 
       // Map(Root, ObjectProject(ObjectProject(ObjectProject((), "some"), "foo"), "bar"))
     }

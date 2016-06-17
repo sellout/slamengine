@@ -500,17 +500,14 @@ package object fp
 
   type ∘[F[_], G[_]] = Composition[F, G]
 
-  /** Coproduct */
-  trait :+:[F[_], G[_]] {
-    type λ[A] = Coproduct[F, G, A]
-  }
+  type Delay[F[_], G[_]] = F ~> (F ∘ G)#λ
 
   // TODO review definition of equal on coproduct
   implicit def coproductEqual[F[_], G[_]](
-  implicit fEq: Equal ~> λ[α => Equal[F[α]]],
-           gEq: Equal ~> λ[α => Equal[G[α]]]):
-    Equal ~> λ[α => Equal[Coproduct[F, G, α]]] =
-  new (Equal ~> λ[α => Equal[Coproduct[F, G, α]]]) {
+  implicit fEq: Delay[Equal, F],
+           gEq: Delay[Equal, G]):
+    Delay[Equal, Coproduct[F, G, ?]] =
+  new Delay[Equal, Coproduct[F, G, ?]] {
     def apply[α](eq: Equal[α]) =
       Equal.equal { (cp1, cp2) =>
         (cp1.run, cp2.run) match {
@@ -521,10 +518,22 @@ package object fp
       }
   }
 
+  implicit def coproductShow[F[_], G[_]](
+    implicit fShow: Delay[Show, F],
+             gShow: Delay[Show, G]):
+      Delay[Show, Coproduct[F, G, ?]] =
+    new Delay[Show, Coproduct[F, G, ?]] {
+      def apply[α](sh: Show[α]): Show[Coproduct[F, G, α]] =
+        Show.show(_.run match {
+          case -\/(fa) => fShow(sh).show(fa)
+          case \/-(ga) => gShow(sh).show(ga)
+        })
+    }
+
   implicit def freeEqual[F[_]: Functor](
-  implicit F: Equal ~> λ[α => Equal[F[α]]]):
-    Equal ~> λ[α => Equal[Free[F, α]]] =
-  new (Equal ~> λ[α => Equal[Free[F, α]]]) {
+  implicit F: Delay[Equal, F]):
+    Delay[Equal, Free[F, ?]] =
+  new Delay[Equal, Free[F, ?]] {
     def apply[α](eq: Equal[α]) =
       Equal.equal((a, b) => (a.resume, b.resume) match {
         case (-\/(f1), -\/(f2)) =>
@@ -534,10 +543,13 @@ package object fp
       })
   }
 
-  type Delay[F[_], G[_]] = F ~> (F ∘ G)#λ
-
   implicit def constEqual[A: Equal]: Delay[Equal, Const[A, ?]] = new Delay[Equal, Const[A, ?]] {
     def apply[B](eq: Equal[B]): Equal[Const[A, B]] =
       Equal.equal((c1, c2) => c1.getConst === c2.getConst)
+  }
+
+  implicit def constShow[A: Show]: Delay[Show, Const[A, ?]] = new Delay[Show, Const[A, ?]] {
+    def apply[B](showB: Show[B]): Show[Const[A, B]] =
+      Show.show(const => Show[A].show(const.getConst))
   }
 }
