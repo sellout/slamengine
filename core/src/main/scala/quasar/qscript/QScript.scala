@@ -68,7 +68,8 @@ object DataLevelOps {
   final case class Ternary[T[_[_]], A](a1: A, a2: A, a3: A) extends MapFunc[T, A]
 
   object MapFunc {
-    implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ MapFunc[T, ?])#λ = new (Equal ~> (Equal ∘ MapFunc[T, ?])#λ) {
+    implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]): Delay[Equal, MapFunc[T, ?]] = new Delay[Equal, MapFunc[T, ?]] {
+      // TODO this is wrong - we need to define equality on a function by function basis
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
         case (Unary(a1), Unary(a2)) => in.equal(a1, a2)
@@ -93,10 +94,6 @@ object DataLevelOps {
   implicit def NTEqual[F[_], A](implicit A: Equal[A], F: Equal ~> λ[α => Equal[F[α]]]):
     Equal[F[A]] =
   F(A)
-
-  // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
-  implicit def FreeMapEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[FreeMap[T]] =
-    freeEqual[MapFunc[T, ?]].apply(Equal[Unit])
 
   // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
   implicit def JoinBranchEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[JoinBranch[T]] =
@@ -219,8 +216,8 @@ object SourcedPathable {
   //scala.Predef.implicitly[Equal[MapFunc[Fix, Unit]]]
   //scala.Predef.implicitly[FreeMap[Fix]]
 
-  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal ~> (Equal ∘ SourcedPathable[T, ?])#λ =
-    new (Equal ~> (Equal ∘ SourcedPathable[T, ?])#λ) {
+  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Delay[Equal, SourcedPathable[T, ?]] =
+    new Delay[Equal, SourcedPathable[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
           case (Map(a1, f1), Map(a2, f2)) => f1 ≟ f2 && eq.equal(a1, a2)
@@ -321,6 +318,8 @@ sealed trait QScriptCore[T[_[_]], A] {
 }
 
 object QScriptCore {
+  //implicit def NTEq[F[_], A: Equal](implicit del: Delay[Equal, F]) = NTEqual[F, A](implicitly, del)
+
   implicit def equal[T[_[_]]](implicit EqT: Equal[T[EJson]]): Equal ~> (Equal ∘ QScriptCore[T, ?])#λ =
     new (Equal ~> (Equal ∘ QScriptCore[T, ?])#λ) {
       def apply[A](eq: Equal[A]) =
@@ -757,6 +756,18 @@ object Transform {
       res2.right))))
   }
 
+  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch[T], right: JoinBranch[T]): Merge[T, Inner[T]] = {
+    val newSrc: ThetaJoin[T, Inner[T]] =
+      ThetaJoin(src, left, right, basicJF, Inner,
+        Free.roll(ObjectConcat(
+          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp1")), Free.point(LeftSide))),
+          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp2")), Free.point(RightSide))))))
+    AbsMerge[T, Inner[T], FreeMap](
+      H.inj(newSrc).embed,
+      Free.roll(ObjectProject(UnitF, Free.roll(StrLit("tmp1")))),
+      Free.roll(ObjectProject(UnitF, Free.roll(StrLit("tmp2")))))
+  }
+
   def wrapUnary[T[_[_]]](value: Inner[T])(func: Unary[T, FreeMap[T]]):
       QScriptPure[T, Inner[T]] =
     F.inj(Map(value, Free.roll(func)))
@@ -807,10 +818,10 @@ object Transform {
   def basicJF[T[_[_]]]: JoinFunc[T] =
     Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
 
-  def elideNopMaps[T[_[_]]: Recursive](implicit EqT: Equal[T[EJson]]):
-      SourcedPathable[T, T[SourcedPathable[T, ?]]] => SourcedPathable[T, T[SourcedPathable[T, ?]]] = {
-    case Map(src, mf) if mf ≟ UnitF => src.project
-    case x                          => x
+  def elideNopMaps[T[_[_]]: Recursive, F[_]: Functor](implicit EqT: Equal[T[EJson]], SP: SourcedPathable[T, ?] :<: F):
+      SourcedPathable[T, T[F]] => F[T[F]] = {
+    case Map(src, mf) if Equal(quasar.qscript.DataLevelOps.NTEqual[Free[MapFunc[T, ?], ?], Unit](implicitly, freeEqual[MapFunc[T, ?]])).equal(mf, UnitF) => src.project
+    case x                          => SP.inj(x)
   }
 
   def elideNopJoins[T[_[_]]: Recursive, F[_]](implicit EqT: Equal[T[EJson]], Th: ThetaJoin[T, ?] :<: F, SP: SourcedPathable[T, ?] :<: F):
@@ -821,17 +832,10 @@ object Transform {
     case x => Th.inj(x)
   }
 
-  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch[T], right: JoinBranch[T]): Merge[T, Inner[T]] = {
-    val newSrc: ThetaJoin[T, Inner[T]] =
-      ThetaJoin(src, left, right, basicJF, Inner,
-        Free.roll(ObjectConcat(
-          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp1")), Free.point(LeftSide))),
-          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp2")), Free.point(RightSide))))))
-    AbsMerge[T, Inner[T], FreeMap](
-      H.inj(newSrc).embed,
-      Free.roll(ObjectProject(UnitF, Free.roll(StrLit("tmp1")))),
-      Free.roll(ObjectProject(UnitF, Free.roll(StrLit("tmp2")))))
-  }
+  def liftQSAlgebra[T[_[_]], F[_], G[_]](orig: G[T[F]] => F[T[F]])(
+    implicit G: G :<: F): (F[T[F]] => F[T[F]]) = ftf => {
+      G.prj(ftf).fold(ftf)(orig) //Option[ThetaJoin[T, T[F]]]
+    }
 
   def pathToProj[T[_[_]]: Corecursive](path: pathy.Path[_, _, _]): FreeMap[T] =
     pathy.Path.peel(path).fold[FreeMap[T]](

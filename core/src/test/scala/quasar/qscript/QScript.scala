@@ -37,7 +37,7 @@ class QScriptSpec extends Specification with ScalazMatchers {
 
   implicit val ma: Mergeable.Aux[Fix, QScriptPure[Fix, Unit]] = scala.Predef.implicitly
 
-  def callIt(lp: Fix[LogicalPlan]): Inner[Fix] = lp.transCata(lpToQScript[Fix])
+  def callIt(lp: Fix[LogicalPlan]): Inner[Fix] = lp.transCata(lpToQScript[Fix]).transCata(liftQSAlgebra(elideNopMaps[Fix, QScriptPure[Fix, ?]]))
 
   def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner[Fix]](Root))).embed
 
@@ -78,6 +78,11 @@ class QScriptSpec extends Specification with ScalazMatchers {
   //val z = callIt(quasar.LogicalPlan.Read(file("/some/foo/bar")))
 
   "replan" should {
+    "convert a very simple read" in {
+      callIt(quasar.LogicalPlan.Read(file("/"))) must
+      equal(RootR)
+    }
+
     "convert a simple read" in {
       callIt(quasar.LogicalPlan.Read(file("/some/foo/bar"))) must
       //equal(RootR)
@@ -90,7 +95,11 @@ class QScriptSpec extends Specification with ScalazMatchers {
                   UnitF[Fix],
                   StrR[Unit]("some")),
                 StrR[Unit]("foo")),
-              StrR[Unit]("bar")))).embed)
+              StrR[Unit]("bar")))).embed)(Fix.equal(
+                coproductEqual(
+                  ThetaJoin.equal,
+                  coproductEqual(
+                    QScriptCore.equal, implicitly[Delay[Equal, Pathable[Fix, ?]]]))), implicitly[Show[Fix[QScriptPure[Fix, ?]]]])
 
       // Map(Root, ObjectProject(ObjectProject(ObjectProject((), "some"), "foo"), "bar"))
     }
