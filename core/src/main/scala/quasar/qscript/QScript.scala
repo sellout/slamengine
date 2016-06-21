@@ -183,17 +183,8 @@ object Transform {
   def G[T[_[_]]] = implicitly[QScriptCore[T, ?] :<: QScriptPure[T, ?]]
   def H[T[_[_]]] = implicitly[ThetaJoin[T, ?] :<: QScriptPure[T, ?]]
 
-  def linearize[T[_[_]]](qs: QScriptPure[T, List[QScriptPure[T, Unit]]]): List[QScriptPure[T, Unit]] =
-    qs.run match {
-      case -\/(thetaJoin) => H.inj(thetaJoin.void) :: thetaJoin.src
-      case \/-(prim) => prim.run match {
-        case -\/(core) => G.inj(core.void) :: core.src
-        case \/-(pathable) => pathable.run match {
-          case -\/(dead) => E[T].inj(dead.void) :: Nil
-          case \/-(srcd) => F.inj(srcd.void) :: srcd.src
-        }
-      }
-    }
+  def linearize[F[_]: Functor: Foldable]: Algebra[F, List[F[Unit]]] =
+    fl => fl.void :: fl.fold
 
   def delinearizeInner[T[_[_]], A]: Pures[T, A] => QScriptPure[T, Pures[T, A]] = {
     case Nil => E.inj(Const(Root))
@@ -208,20 +199,17 @@ object Transform {
   type DoublePures[T[_[_]]] = (Pures[T, Unit], Pures[T, Unit])
   type DoubleFreeMap[T[_[_]]] = (FreeMap[T], FreeMap[T])
   type TriplePures[T[_[_]]] = (Pures[T, Unit], Pures[T, Unit], Pures[T, Unit])
-  
+
   def unzipper[T[_[_]]]: ListF[QScriptPure[T, Unit], TriplePures[T]] => TriplePures[T] = {
     case NilF() => (Nil, Nil, Nil)
     case ConsF(head, (acc, l, r)) => (head :: acc, l, r)
   }
 
-  //  (Pures[T, A], Pures[T, A]) =>  (Pures[T, A], Pures[T, A], Pures[T, A]) \/ ListF[QSP, (Pures[T, A], Pures[T, A])]
-  //  (Pures[T, A], Pures[T, A]) =>  ListF[QSP, (Pures[T, A], Pures[T, A], Pures[T, A]) \/ (Pures[T, A], Pures[T, A])]
   def zipper[T[_[_]]: Corecursive]: ElgotCoalgebra[TriplePures[T] \/ ?, ListF[QScriptPure[T, Unit], ?], (DoubleFreeMap[T], DoublePures[T])] = {
     case ((_, _), (Nil, Nil)) => (Nil, Nil, Nil).left
     case ((_, _), (Nil, r))   => (Nil, Nil, r).left
     case ((_, _), (l,   Nil)) => (Nil, l,   Nil).left
     case ((lm, rm), (l :: ls, r :: rs)) => {
-      scala.Predef.println(s"($lm, $rm), ($l :: $ls, $r :: $rs)")
       val ma = implicitly[Mergeable.Aux[T, QScriptPure[T, Unit]]]
 
       ma.mergeSrcs(lm, rm, l, r).fold[TriplePures[T] \/ ListF[QScriptPure[T, Unit], (DoubleFreeMap[T], DoublePures[T])]](

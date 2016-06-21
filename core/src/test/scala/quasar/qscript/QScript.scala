@@ -31,7 +31,6 @@ import scalaz._
 import Scalaz._
 
 class QScriptSpec extends Specification with ScalazMatchers {
-  import DataLevelOps._
   import MapFuncs._
   import Transform._
 
@@ -43,8 +42,8 @@ class QScriptSpec extends Specification with ScalazMatchers {
 
   def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner[Fix]](Root))).embed
 
-  def ObjectProjectR[A](src: Free[MapFunc[Fix, ?], A], field: Free[MapFunc[Fix, ?], A]): Free[MapFunc[Fix, ?], A] =
-    Free.roll(ObjectProject(src, field))
+  def ProjectFieldR[A](src: Free[MapFunc[Fix, ?], A], field: Free[MapFunc[Fix, ?], A]): Free[MapFunc[Fix, ?], A] =
+    Free.roll(ProjectField(src, field))
 
   def StrR[A](s: String): Free[MapFunc[Fix, ?], A] =
     Free.roll(StrLit[Fix, Free[MapFunc[Fix, ?], A]](s))
@@ -56,7 +55,7 @@ class QScriptSpec extends Specification with ScalazMatchers {
     "convert a very simple read" in {
       callIt(lpRead("/foo")) must
       equal(
-        F.inj(Map(RootR, ObjectProjectR(UnitF, StrR("foo")))).embed)
+        F.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
 
     "convert a simple read" in {
@@ -64,9 +63,9 @@ class QScriptSpec extends Specification with ScalazMatchers {
       equal(
         F.inj(
           Map(RootR,
-            ObjectProjectR(
-              ObjectProjectR(
-                ObjectProjectR(
+            ProjectFieldR(
+              ProjectFieldR(
+                ProjectFieldR(
                   UnitF,
                   StrR("some")),
                 StrR("foo")),
@@ -81,8 +80,8 @@ class QScriptSpec extends Specification with ScalazMatchers {
         F.inj(
           Map(RootR,
             Free.roll(Add[Fix, FreeMap[Fix]](
-              ObjectProjectR(UnitF, StrR("foo")),
-              ObjectProjectR(UnitF, StrR("bar")))))).embed)
+              ProjectFieldR(UnitF, StrR("foo")),
+              ProjectFieldR(UnitF, StrR("bar")))))).embed)
     }
   }
 }
