@@ -886,6 +886,14 @@ object Transform {
 
   // TODO we need to handling bucketing from GroupBy
   // the buckets will not always be UnitF, if we have grouped previously
+  // GroupBy probably just modifies state
+  //
+  // TODO handle inner LeftShift
+  // an Expansion creates node and modifies state
+  //
+  // when we get here, look at the bucketing state - consume the state!
+  // List[BucketingState] - List[FreeMap]
+  // Nil ~ UnitF
   //
   // TODO also we should be able to statically guarantee that we are matching on all reductions here
   // this involves changing how DimensionalEffect is assigned (algebra rather than parameter)
