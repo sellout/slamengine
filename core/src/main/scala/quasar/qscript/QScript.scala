@@ -71,49 +71,6 @@ object EJson {
 }
 
 object DataLevelOps {
-  sealed trait MapFunc[T[_[_]], A]
-  final case class Nullary[T[_[_]], A](value: T[EJson]) extends MapFunc[T, A]
-  final case class Unary[T[_[_]], A](a1: A) extends MapFunc[T, A]
-  final case class Binary[T[_[_]], A](a1: A, a2: A) extends MapFunc[T, A]
-  final case class Ternary[T[_[_]], A](a1: A, a2: A, a3: A) extends MapFunc[T, A]
-
-  object MapFunc {
-    implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]): Delay[Equal, MapFunc[T, ?]] = new Delay[Equal, MapFunc[T, ?]] {
-      // TODO this is wrong - we need to define equality on a function by function basis
-      def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
-        case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
-        case (Unary(a1), Unary(a2)) => in.equal(a1, a2)
-        case (Binary(a11, a12), Binary(a21, a22)) => in.equal(a11, a21) && in.equal(a12, a22)
-        case (Ternary(a11, a12, a13), Ternary(a21, a22, a23)) => in.equal(a11, a21) && in.equal(a12, a22) && in.equal(a13, a23)
-        case (_, _) => false
-      }
-    }
-
-    implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
-      def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
-        fa match {
-          case Nullary(v) => Nullary[T, B](v)
-          case Unary(a1) => Unary(f(a1))
-          case Binary(a1, a2) => Binary(f(a1), f(a2))
-          case Ternary(a1, a2, a3) => Ternary(f(a1), f(a2), f(a3))
-        }
-    }
-
-    implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
-      new Delay[Show, MapFunc[T, ?]] {
-        def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
-          case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
-          case Unary(a1) => Cord("Unary(") ++ sh.show(a1) ++ Cord(")")
-          case Binary(a1, a2) => Cord("Binary(") ++ sh.show(a1) ++ sh.show(a2) ++ Cord(")")
-          case Ternary(a1, a2, a3) => Cord("Ternary(") ++ sh.show(a1) ++ sh.show(a2) ++ sh.show(a3) ++ Cord(")")
-        }
-      }
-  }
-
-  // TODO this should be found from matryoshka - why isn't it being found!?!?
-  implicit def NTEqual[F[_], A](implicit A: Equal[A], F: Equal ~> λ[α => Equal[F[α]]]):
-    Equal[F[A]] =
-  F(A)
 
   // TODO we would like to use `f1 ≟ f2` - but the implicit for Free is not found
   implicit def JoinBranchEqual[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Equal[JoinBranch[T]] =
@@ -400,11 +357,11 @@ final case class PatternGuard[T[_[_]], A](
   *
   * @group MRA
   */
-final case class Reduce[T[_[_]], A, N <: Succ[_]](
+final case class Reduce[T[_[_]], A, N <: Nat](
   src: A,
   bucket: FreeMap[T],
-  reducers: Sized[List[ReduceFunc[FreeMap[T]]], N],
-  repair: Free[MapFunc[T, ?], Fin[N]])
+  reducers: Sized[List[ReduceFunc[FreeMap[T]]], Succ[N]],
+  repair: Free[MapFunc[T, ?], Fin[Succ[N]]])
     extends QScriptCore[T, A]
 
 /** Sorts values within a bucket. This could be represented with
@@ -858,7 +815,7 @@ object Transform {
       func: UnaryFunc,
     values: Func.Input[Inner[T], nat._1]):
       QScriptPure[T, Inner[T]] =
-    G.inj(Reduce[T, Inner[T], nat._1](values(0), UnitF, Sized[List](func match {
+    G.inj(Reduce[T, Inner[T], nat._0](values(0), UnitF, Sized[List](func match {
       case agg.Count     => Count[FreeMap[T]](UnitF)
       case agg.Sum       => Sum[FreeMap[T]](UnitF)
       case agg.Min       => Min[FreeMap[T]](UnitF)
@@ -872,7 +829,7 @@ object Transform {
 
   def elideNopMaps[T[_[_]]: Recursive, F[_]: Functor](implicit EqT: Equal[T[EJson]], SP: SourcedPathable[T, ?] :<: F):
       SourcedPathable[T, T[F]] => F[T[F]] = {
-    case Map(src, mf) if Equal(quasar.qscript.DataLevelOps.NTEqual[Free[MapFunc[T, ?], ?], Unit](implicitly, freeEqual[MapFunc[T, ?]])).equal(mf, UnitF) => src.project
+    case Map(src, mf) if Equal(NTEqual[Free[MapFunc[T, ?], ?], Unit](implicitly, freeEqual[MapFunc[T, ?]])).equal(mf, UnitF) => src.project
     case x                          => SP.inj(x)
   }
 

@@ -24,6 +24,7 @@ import java.lang.NumberFormatException
 import monocle.{Lens, Prism}
 import scalaz.{Lens => _, _}, Liskov._, Scalaz._
 import scalaz.stream._
+import shapeless.{Fin, Nat, Sized, Succ}
 import simulacrum.typeclass
 
 sealed trait LowerPriorityTreeInstances {
@@ -561,4 +562,13 @@ package object fp
     def apply[B](showB: Show[B]): Show[Const[A, B]] =
       Show.show(const => Show[A].show(const.getConst))
   }
+
+  implicit def sizedEqual[A: Equal, N <: Nat]: Equal[Sized[A, N]] =
+    Equal.equal((a, b) => a.unsized ≟ b.unsized)
+
+  implicit def natEqual[N <: Nat]: Equal[N] =
+    Equal.equal((a, b) => true)
+
+  implicit def finEqual[N <: Succ[_]]: Equal[Fin[N]] =
+    Equal.equal((a, b) => true)
 }
