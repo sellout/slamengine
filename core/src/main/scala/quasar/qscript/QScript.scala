@@ -42,6 +42,7 @@ object EJson {
   def toEJson[T[_[_]]](data: Data): T[EJson] = ???
 
   final case class Null[A]() extends EJson[A]
+  final case class Bool[A](b: Boolean) extends EJson[A]
   final case class Str[A](str: String) extends EJson[A]
 
   implicit def equal: Delay[Equal, EJson] = new Delay[Equal, EJson] {
@@ -51,6 +52,7 @@ object EJson {
   implicit def functor: Functor[EJson] = new Functor[EJson] {
     def map[A, B](fa: EJson[A])(f: A => B): EJson[B] = fa match {
       case Null() => Null[B]()
+      case Bool(b) => Bool[B](b)
       case Str(str) => Str[B](str)
     }
   }
@@ -58,6 +60,7 @@ object EJson {
   implicit def show: Delay[Show, EJson] = new Delay[Show, EJson] {
     def apply[A](sh: Show[A]): Show[EJson[A]] = Show.show {
       case Null() => Cord("Null()")
+      case Bool(b) => Cord(s"Bool($b)")
       case Str(str) => Cord(s"Str($str)")
     }
   }
@@ -493,15 +496,20 @@ object Transform {
       //// z := select sum(pop) from zips group by city
       //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Squashing => ??? // returning the source with added metadata - mutiple buckets
 
-      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) => {
-      //  func match {
-      //    case GroupBy => ??? // returning the source with added metadata - mutiple buckets
-      //    case UnionAll => ??? //UnionAll(...)
-      //    // input(0) ~ (name, thing)
-      //    case IntersectAll => ObjProj(left, ThetaJoin(Eq, Inner, Root(), input(0), input(1)))  // inner join where left = right, combine func = left (whatever)
-      //    case Except => ObjProj(left, ThetaJoin(False, LeftOuter, Root(), input(0), input(1)))
-      //  }
-      //}
+      case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) => {
+       func match {
+         case set.GroupBy => a1.project // FIXME: add a2 to state
+         case set.Union =>
+           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
+           F.inj(Union(src, jb1, jb2))
+         case set.Intersect =>
+           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
+           H.inj(ThetaJoin(src, jb1, jb2, Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide))), Inner, Free.point(LeftSide)))
+         case set.Except =>
+           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
+           H.inj(ThetaJoin(src, jb1, jb2, Free.roll(Nullary(EJson.Bool[T[EJson]](false).embed)), LeftOuter, Free.point(LeftSide)))
+       }
+      }
       //case LogicalPlan.InvokeF(func @ TernaryFunc, input) => {
       //  func match {
       //    // src is Root() - and we rewrite lBranch/rBranch so that () refers to Root()
