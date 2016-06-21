@@ -243,54 +243,50 @@ object Transform {
       foldIso(CoEnv.freeIso[Unit, QScriptPure[T, ?]]).get(rTail.reverse.ana[T, CoEnv[Unit, QScriptPure[T, ?], ?]](delinearizeJoinBranch >>> (CoEnv(_)))))
   }
 
-  // (implicit F: M ~> M[F]): Mergeable[T[F]]
-
   def merge2Map[T[_[_]]: Recursive: Corecursive](
-      values: Func.Input[Inner[T], nat._2])(
-      func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]): QScriptPure[T, Inner[T]] = {
-    
+    values: Func.Input[Inner[T], nat._2])(
+    func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
+      SourcedPathable[T, Inner[T]] = {
     val AbsMerge(merged, left, right) = merge(values(0), values(1))
-    val res: Merge[T, Inner[T]] = makeBasicTheta(merged, left, right)
+    val res = makeBasicTheta(merged, left, right)
 
-    F.inj(Map(res.src, Free.roll(func(res.left, res.right))))
+    Map(H.inj(res.src).embed, Free.roll(func(res.left, res.right)))
   }
 
   def merge3Map[T[_[_]]: Recursive: Corecursive](
     values: Func.Input[Inner[T], nat._3])(
     func: (FreeMap[T], FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]])(
     implicit ma: Mergeable.Aux[T, QScriptPure[T, Unit]]):
-      QScriptPure[T, Inner[T]] = {
+      SourcedPathable[T, Inner[T]] = {
 
     val AbsMerge(merged, first, second) = merge(values(0), values(1))
     val AbsMerge(merged2, fands, third) = merge(merged, values(2))
 
-    val res: Merge[T, Inner[T]] = makeBasicTheta(merged2, first, second)
-    val res2 = makeBasicTheta(res.src, fands, third)
+    val res = makeBasicTheta(merged2, first, second)
+    val res2 = makeBasicTheta(H.inj(res.src).embed, fands, third)
 
-    F.inj(Map(res2.src, Free.roll(func(
+    Map(H.inj(res2.src).embed, Free.roll(func(
       rebase(res2.left, res.left),
       rebase(res2.left, res.right),
-      res2.right))))
+      res2.right)))
   }
 
-  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch[T], right: JoinBranch[T]): Merge[T, Inner[T]] = {
-    val newSrc: ThetaJoin[T, Inner[T]] =
+  def makeBasicTheta[T[_[_]]: Corecursive](src: Inner[T], left: JoinBranch[T], right: JoinBranch[T]):
+      Merge[T, ThetaJoin[T, Inner[T]]] =
+    AbsMerge[T, ThetaJoin[T, Inner[T]], FreeMap](
       ThetaJoin(src, left, right, basicJF, Inner,
         Free.roll(ConcatObjects(
           Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp1")), Free.point(LeftSide))),
-          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp2")), Free.point(RightSide))))))
-    AbsMerge[T, Inner[T], FreeMap](
-      H.inj(newSrc).embed,
+          Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("tmp2")), Free.point(RightSide)))))),
       Free.roll(ProjectField(UnitF, Free.roll(StrLit("tmp1")))),
       Free.roll(ProjectField(UnitF, Free.roll(StrLit("tmp2")))))
-  }
 
+  // NB: More compilicated LeftShifts are generated as an optimization:
+  // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
+  // after: LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
   def invokeLeftShift[T[_[_]]](
       func: UnaryFunc,
       values: Func.Input[Inner[T], nat._1]): SourcedPathable[T, Inner[T]] =
-
-        /// ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
-        //  LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
     func match {
       case structural.FlattenMap => LeftShift(values(0), UnitF, Free.point(RightSide))
       case structural.FlattenArray => LeftShift(values(0), UnitF, Free.point(RightSide))
@@ -332,7 +328,7 @@ object Transform {
 
   def invokeMapping2[T[_[_]]: Recursive : Corecursive](
       func: BinaryFunc,
-      values: Func.Input[Inner[T], nat._2]): QScriptPure[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._2]): SourcedPathable[T, Inner[T]] =
     merge2Map(values)(func match {
       case date.Extract => Extract(_, _)
       case math.Add      => Add(_, _)
@@ -366,7 +362,7 @@ object Transform {
 
   def invokeMapping3[T[_[_]]: Recursive : Corecursive](
       func: TernaryFunc,
-      values: Func.Input[Inner[T], nat._3]): QScriptPure[T, Inner[T]] =
+      values: Func.Input[Inner[T], nat._3]): SourcedPathable[T, Inner[T]] =
     merge3Map(values)(func match {
       case relations.Between => Between(_, _, _)
       case relations.Cond => Cond(_, _, _)
@@ -391,15 +387,15 @@ object Transform {
   def invokeReduction1[T[_[_]]](
       func: UnaryFunc,
     values: Func.Input[Inner[T], nat._1]):
-      QScriptPure[T, Inner[T]] =
-    G.inj(Reduce[T, Inner[T], nat._0](values(0), UnitF, Sized[List](func match {
+      QScriptCore[T, Inner[T]] =
+    Reduce[T, Inner[T], nat._0](values(0), UnitF, Sized[List](func match {
       case agg.Count     => Count[FreeMap[T]](UnitF)
       case agg.Sum       => Sum[FreeMap[T]](UnitF)
       case agg.Min       => Min[FreeMap[T]](UnitF)
       case agg.Max       => Max[FreeMap[T]](UnitF)
       case agg.Avg       => Avg[FreeMap[T]](UnitF)
       case agg.Arbitrary => Arbitrary[FreeMap[T]](UnitF)
-    }), Free.point(Fin[nat._0, nat._1])))
+    }), Free.point(Fin[nat._0, nat._1]))
 
   def basicJF[T[_[_]]]: JoinFunc[T] =
     Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
@@ -467,13 +463,13 @@ object Transform {
       F.inj(invokeMapping1(func, Func.Input1(a1)))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Mapping =>
-      invokeMapping2(func, Func.Input2(a1, a2))
+      F.inj(invokeMapping2(func, Func.Input2(a1, a2)))
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) if func.effect == Mapping =>
-      invokeMapping3(func, Func.Input3(a1, a2, a3))
+      F.inj(invokeMapping3(func, Func.Input3(a1, a2, a3)))
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Reduction =>
-      invokeReduction1(func, Func.Input1(a1))
+      G.inj(invokeReduction1(func, Func.Input1(a1)))
 
     case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
@@ -488,11 +484,11 @@ object Transform {
 
       makeBasicTheta(src, jb1, jb2) match {
         case AbsMerge(src, fm1, fm2) =>
-          F.inj(Map(G.inj(Filter(src, fm2)).embed, fm1))
+          F.inj(Map(G.inj(Filter(H.inj(src).embed, fm2)).embed, fm1))
       }
 
-      case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
-        F.inj(invokeLeftShift(func, Func.Input1(a1)))
+    case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
+      F.inj(invokeLeftShift(func, Func.Input1(a1)))
 
       //// handling bucketing for sorting
       //// e.g. squashing before a reduce puts everything in the same bucket
