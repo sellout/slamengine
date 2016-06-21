@@ -221,8 +221,17 @@ object SourcedPathable {
   implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, SourcedPathable[T, ?]] =
     new Delay[Show, SourcedPathable[T, ?]] {
       def apply[A](s: Show[A]): Show[SourcedPathable[T, A]] = Show.show(_ match {
-        case Map(src, mf) => Cord("Map(") ++ s.show(src) ++ Cord(",") ++ Show[FreeMap[T]].show(mf) ++ Cord(")")
-        case _ => Cord("some other sourced pathable sorry")
+        case Map(src, mf) => Cord("Map(") ++
+          s.show(src) ++ Cord(",") ++
+          mf.show ++ Cord(")")
+        case LeftShift(src, struct, repair) => Cord("LeftShift(") ++
+          s.show(src) ++ Cord(",") ++
+          struct.show ++ Cord(",") ++
+          repair.show ++ Cord(")")
+        case Union(src, l, r) => Cord("Union(") ++
+          s.show(src) ++ Cord(",") ++
+          l.show ++ Cord(",") ++
+          r.show ++ Cord(")")
       })
     }
 }
@@ -292,8 +301,8 @@ sealed trait QScriptCore[T[_[_]], A] {
 }
 
 object QScriptCore {
-  implicit def equal[T[_[_]]](implicit EqT: Equal[T[EJson]]): Equal ~> (Equal ∘ QScriptCore[T, ?])#λ =
-    new (Equal ~> (Equal ∘ QScriptCore[T, ?])#λ) {
+  implicit def equal[T[_[_]]](implicit EqT: Equal[T[EJson]]): Delay[Equal, QScriptCore[T, ?]] =
+    new Delay[Equal, QScriptCore[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
           case (Reduce(a1, b1, f1, r1), Reduce(a2, b2, f2, r2)) =>
@@ -326,16 +335,31 @@ object QScriptCore {
     new Delay[Show, QScriptCore[T, ?]] {
       def apply[A](s: Show[A]): Show[QScriptCore[T, A]] =
         Show.show {
-          case Reduce(a, b, func, repair) => Cord("Reduce(") ++ s.show(a) ++ b.show ++ // func.show ++ repair.show ++
-            Cord(")")
-          case Sort(a, b, o)              => Cord("Sort(") ++ s.show(a) ++ b.show ++ o.show ++ Cord(")")
-          case Filter(a, func)            => Cord("Filter(") ++ s.show(a) ++ func.show ++ Cord(")")
-          case Take(a, f, c)              => Cord("Take(") ++ s.show(a) ++ // f.show ++ c.show ++
-            Cord(")")
-          case Drop(a, f, c)              => Cord("Drop(") ++ s.show(a) ++ // f.show ++ c.show ++
-            Cord(")")
-          case PatternGuard(a, typ, cont, fb) =>
-            Cord("PatternGuard(") ++ s.show(a) ++ typ.show ++ cont.show ++ fb.show ++ Cord(")")
+          case Reduce(a, b, red, rep) => Cord("Reduce(") ++
+            s.show(a) ++ Cord(",") ++
+            b.show ++ Cord(",") ++
+            red.show ++ Cord(",") ++
+            rep.show ++ Cord(")")
+          case Sort(a, b, o) => Cord("Sort(") ++
+            s.show(a) ++ Cord(",") ++
+            b.show ++ Cord(",") ++
+            o.show ++ Cord(")")
+          case Filter(a, func) => Cord("Filter(") ++
+            s.show(a) ++ Cord(",") ++
+            func.show ++ Cord(")")
+          case Take(a, f, c) => Cord("Take(") ++
+            s.show(a) ++ Cord(",") ++
+            f.show ++ Cord(",") ++
+            c.show ++ Cord(")")
+          case Drop(a, f, c) => Cord("Drop(") ++
+            s.show(a) ++ Cord(",") ++
+            f.show ++ Cord(",") ++
+            c.show ++ Cord(")")
+          case PatternGuard(a, typ, cont, fb) => Cord("PatternGuard(") ++
+            s.show(a) ++ Cord(",") ++
+            typ.show ++ Cord(",") ++
+            cont.show ++ Cord(",") ++
+            fb.show ++ Cord(")")
         }
     }
 }
@@ -444,17 +468,17 @@ object ThetaJoin {
     }
 
 
-  implicit def show[T[_[_]]: Recursive](implicit s: Show[T[EJson]]): Delay[Show, ThetaJoin[T, ?]] =
+  implicit def show[T[_[_]]](implicit s: Show[T[EJson]]): Delay[Show, ThetaJoin[T, ?]] =
     new Delay[Show, ThetaJoin[T, ?]] {
       def apply[A](showA: Show[A]): Show[ThetaJoin[T, A]] = Show.show {
         case ThetaJoin(src, lBr, rBr, on, f, combine) =>
           Cord("ThetaJoin(") ++
           showA.show(src) ++ Cord(",") ++
-          Show[JoinBranch[T]].show(lBr) ++ Cord(",") ++
-          Show[JoinBranch[T]].show(rBr) ++ Cord(",") ++
-          Show[JoinFunc[T]].show(on) ++ Cord(",") ++
-          Show[JoinType].show(f) ++ Cord(",") ++
-          Show[JoinFunc[T]].show(combine) ++ Cord(")")
+          lBr.show ++ Cord(",") ++
+          rBr.show ++ Cord(",") ++
+          on.show ++ Cord(",") ++
+          f.show ++ Cord(",") ++
+          combine.show ++ Cord(")")
       }
     }
 }

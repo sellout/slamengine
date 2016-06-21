@@ -101,6 +101,7 @@ package object quasar {
       skipped)(
       l => Take(skipped, LogicalPlan.ConstantF[T[LogicalPlan]](Data.Int(l.get)).embed).embed)
   }
+
   // TODO generalize this and contribute to shapeless-contrib
   implicit class FuncUtils[A, N <: shapeless.Nat](val self: Func.Input[A, N]) extends scala.AnyVal {
     def reverse: Func.Input[A, N] =
