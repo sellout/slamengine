@@ -794,6 +794,23 @@ object Transform {
       Free.roll(ObjectProject(UnitF, Free.roll(StrLit("tmp2")))))
   }
 
+  def invokeLeftShift[T[_[_]]](
+      func: UnaryFunc,
+      values: Func.Input[Inner[T], nat._1]): SourcedPathable[T, Inner[T]] =
+
+        /// ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
+        //  LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
+    func match {
+      case structural.FlattenMap => LeftShift(values(0), UnitF, Free.point(RightSide))
+      case structural.FlattenArray => LeftShift(values(0), UnitF, Free.point(RightSide))
+      case structural.ShiftMap => LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+      case structural.ShiftArray => LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+      case _ => ???
+
+      // ['a', 'b', 'c'] => [0, 1, 2] // custom map func - does not affect bucketing
+      // LeftShift(Map(flattenArrayIndices))
+    }
+
   def invokeMapping1[T[_[_]]](
       func: UnaryFunc,
       values: Func.Input[Inner[T], nat._1]): SourcedPathable[T, Inner[T]] =
@@ -975,7 +992,8 @@ object Transform {
           F.inj(Map(G.inj(Filter(src, fm2)).embed, fm1))
       }
 
-      //case LogicalPlan.InvokeF(func @ BinaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Expansion => invokeLeftShift(func, input)
+      case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
+        F.inj(invokeLeftShift(func, Func.Input1(a1)))
 
       //// handling bucketing for sorting
       //// e.g. squashing before a reduce puts everything in the same bucket
