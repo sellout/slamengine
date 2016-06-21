@@ -16,6 +16,8 @@
 
 package quasar
 
+import quasar.Predef._
+
 import scalaz._
 
 /** Here we no longer care about provenance. Backends can’t do anything with
@@ -26,31 +28,40 @@ import scalaz._
   * that doesn’t include the cross portion.
   */
 package object qscript {
-  type Pathable[T[_[_]], A] = Coproduct[Const[DeadEnd, ?], SourcedPathable[T, ?], A]
+  type Pathable[T[_[_]], F[_], A] =
+    Coproduct[Const[DeadEnd, ?], SourcedPathable[T, F, ?], A]
 
   /** These are the operations included in all forms of QScript.
     */
-  type QScriptPrim[T[_[_]], A] = Coproduct[QScriptCore[T, ?], Pathable[T, ?], A]
+  type QScriptPrim[T[_[_]], F[_], A] =
+    Coproduct[QScriptCore[T, F, ?], Pathable[T, F, ?], A]
 
   /** This is the target of the core compiler. Normalization is applied to this
     * structure, and it contains no Read or EquiJoin.
     */
-  type QScriptPure[T[_[_]], A] = Coproduct[ThetaJoin[T, ?], QScriptPrim[T, ?], A]
+  type QScriptPure[T[_[_]], F[_], A] =
+    Coproduct[ThetaJoin[T, F, ?], QScriptPrim[T, F, ?], A]
 
   /** These nodes exist in all QScript structures that a backend sees.
     */
-  type QScriptCommon[T[_[_]], A] = Coproduct[Read, QScriptPrim[T, ?], A]
+  type QScriptCommon[T[_[_]], F[_], A] =
+    Coproduct[Read, QScriptPrim[T, F, ?], A]
 
   // The following two types are the only ones that should be seen by a backend.
 
   /** This is the primary form seen by a backend. It contains reads of files.
     */
-  type QScript[T[_[_]], A] = Coproduct[ThetaJoin[T, ?], QScriptCommon[T, ?], A]
+  type QScript[T[_[_]], F[_], A] =
+    Coproduct[ThetaJoin[T, F, ?], QScriptCommon[T, F, ?], A]
 
   /** A variant with a simpler join type. A backend can choose to operate on this
     * structure by applying the `equiJoinsOnly` transformation. Backends
     * without true join support will likely find it easier to work with this
     * than to handle full ThetaJoins.
     */
-  type EquiQScript[T[_[_]], A] = Coproduct[EquiJoin[T, ?], QScriptCommon[T, ?], A]
+  type EquiQScript[T[_[_]], F[_], A] =
+    Coproduct[EquiJoin[T, F, ?], QScriptCommon[T, F, ?], A]
+
+  final case class AbsMerge[F[_], A](
+    src: A, left: Free[F, Unit], right: Free[F, Unit])
 }
