@@ -76,7 +76,11 @@ object MapFunc {
       fa match {
         case Nullary(v) => Nullary[T, B](v)
         case Negate(a1) => Negate(f(a1))
-        case _ => ???
+        case MakeObject(a1, a2) => MakeObject(f(a1), f(a2))
+        case ConcatObjects(a1, a2) => ConcatObjects(f(a1), f(a2))
+        case ProjectField(a1, a2) => ProjectField(f(a1), f(a2))
+        case Eq(a1, a2) => Eq(f(a1), f(a2))
+        case x => { scala.Predef.print(s">>>>>>>>>>> got a functor $x"); ??? }
       }
   }
 
@@ -96,7 +100,11 @@ object MapFunc {
       def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
         case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
         case Negate(a1) => Cord("Negate(") ++ sh.show(a1) ++ Cord(")")
-        case _ => ???
+        case MakeObject(a1, a2) => Cord("MakeObject(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case ConcatObjects(a1, a2) => Cord("ConcatObjects(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case ProjectField(a1, a2) => Cord("ProjectField(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Eq(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case x => { scala.Predef.print(s">>>>>>>>>>> got a show $x"); ??? }
       }
     }
 }

@@ -85,6 +85,8 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
     }
 
     "convert basic join" in {
+      //"select foo.name, bar.address from foo join bar on foo.id = bar.foo_id",
+
       val lp = LP.Let('__tmp0, lpRead("/foo"),
         LP.Let('__tmp1, lpRead("/bar"),
           LP.Let('__tmp2,

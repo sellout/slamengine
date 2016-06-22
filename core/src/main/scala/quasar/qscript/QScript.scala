@@ -510,6 +510,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
           Free.roll(StrLit(n.fold(_.value, _.value)))))
     }
 
+  // state: List[FreeMap]
   def lpToQScript: LogicalPlan[Inner] => QScriptPure[T, Inner] = {
     case LogicalPlan.ReadF(path) =>
       F.inj(Map(CorecursiveOps[T, QScriptPure[T, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed, pathToProj(path)))
