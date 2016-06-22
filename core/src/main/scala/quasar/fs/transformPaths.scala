@@ -18,7 +18,6 @@ package quasar.fs
 
 import quasar.LogicalPlan, LogicalPlan.ReadF
 import quasar.fp.free.injectedNT
-import quasar.fp.prism._
 
 import matryoshka.{FunctorT, Fix}, FunctorT.ops._
 import monocle.{Lens, Optional}

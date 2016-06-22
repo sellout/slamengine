@@ -31,22 +31,22 @@ import scalaz._
 import Scalaz._
 
 class QScriptSpec extends Specification with ScalazMatchers {
-  import MapFuncs._
-  import Transform._
+  val transform = new Transform[Fix]
+  import transform._
+  import transform.mf._
 
-  def callIt(lp: Fix[LogicalPlan]): Inner[Fix] =
-    lp.transCata(lpToQScript[Fix])
-       .transCata(liftQSAlgebra(elideNopJoins[Fix, QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra(elideNopMaps[Fix, QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra2(coalesceMap[Fix, QScriptPure[Fix, ?]]))
+  def callIt(lp: Fix[LogicalPlan]): Inner =
+    lp.transCata(lpToQScript)
+       .transCata(liftQSAlgebra(elideNopJoins[QScriptPure[Fix, ?]]))
+       .transCata(liftQSAlgebra(elideNopMaps[QScriptPure[Fix, ?]]))
+       .transCata(liftQSAlgebra2(coalesceMap[QScriptPure[Fix, ?]]))
 
-  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner[Fix]](Root))).embed
+  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed
 
-  def ProjectFieldR[A](src: Free[MapFunc[Fix, ?], A], field: Free[MapFunc[Fix, ?], A]): Free[MapFunc[Fix, ?], A] =
+  def ProjectFieldR[A](src: FreeMap[Fix], field: FreeMap[Fix]): FreeMap[Fix] =
     Free.roll(ProjectField(src, field))
 
-  def StrR[A](s: String): Free[MapFunc[Fix, ?], A] =
-    Free.roll(StrLit[Fix, Free[MapFunc[Fix, ?], A]](s))
+  def StrR[A](s: String): FreeMap[Fix] = Free.roll(StrLit(s))
 
   def lpRead(path: String): Fix[LogicalPlan] =
     LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile(path).get))
@@ -79,7 +79,7 @@ class QScriptSpec extends Specification with ScalazMatchers {
       equal(
         F.inj(
           Map(RootR,
-            Free.roll(Add[Fix, FreeMap[Fix]](
+            Free.roll(Add(
               ProjectFieldR(UnitF, StrR("foo")),
               ProjectFieldR(UnitF, StrR("bar")))))).embed)
     }

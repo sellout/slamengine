@@ -19,71 +19,80 @@ package quasar.qscript
 import quasar.Predef._
 
 import matryoshka._
+import monocle.Prism
 
-object MapFuncs {
+class MapFuncs[T[_[_]], A] {
   // array
-  def ArrayLength[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Length(a1: A) = Unary[T, A](a1)
 
   // date
-  def Date[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Time[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Timestamp[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Interval[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def TimeOfDay[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def ToTimestamp[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Extract[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Date(a1: A) = Unary[T, A](a1)
+  def Time(a1: A) = Unary[T, A](a1)
+  def Timestamp(a1: A) = Unary[T, A](a1)
+  def Interval(a1: A) = Unary[T, A](a1)
+  def TimeOfDay(a1: A) = Unary[T, A](a1)
+  def ToTimestamp(a1: A) = Unary[T, A](a1)
+  def Extract(a1: A, a2: A) = Binary[T, A](a1, a2)
 
   // math
-  def Negate[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Add[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Multiply[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Subtract[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Divide[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Modulo[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Power[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Negate(a1: A) = Unary[T, A](a1)
+  def Add(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Multiply(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Subtract(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Divide(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Modulo(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Power(a1: A, a2: A) = Binary[T, A](a1, a2)
 
   // relations
-  def Not[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Eq[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Neq[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Lt[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Lte[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Gt[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Gte[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def IfUndefined[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def And[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Or[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Coalesce[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Between[T[_[_]], A](a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Cond[T[_[_]], A](a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  def Not(a1: A) = Unary[T, A](a1)
+  def Eq(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Neq(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Lt(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Lte(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Gt(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Gte(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def IfUndefined(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def And(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Or(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Coalesce(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Between(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  def Cond(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
 
   // set
-  def In[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Within[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Constantly[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def In(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Within(a1: A, a2: A) = Binary[T, A](a1, a2)
+  def Constantly(a1: A, a2: A) = Binary[T, A](a1, a2)
 
   // string
-  def Length[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Lower[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Upper[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Boolean[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Integer[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Decimal[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Null[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def ToString[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def Like[T[_[_]], A](a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Search[T[_[_]], A](a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Substring[T[_[_]], A](a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  def Lower(a1: A) = Unary[T, A](a1)
+  def Upper(a1: A) = Unary[T, A](a1)
+  def Boolean(a1: A) = Unary[T, A](a1)
+  def Integer(a1: A) = Unary[T, A](a1)
+  def Decimal(a1: A) = Unary[T, A](a1)
+  def Null(a1: A) = Unary[T, A](a1)
+  def ToString(a1: A) = Unary[T, A](a1)
+  def Like(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  def Search(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  def Substring(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
 
   // structural
-  def MakeArray[T[_[_]], A](a1: A) = Unary[T, A](a1)
-  def MakeObject[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def ConcatArrays[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def ConcatObjects[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def ProjectIndex[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def ProjectField[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
-  def DeleteField[T[_[_]], A](a1: A, a2: A) = Binary[T, A](a1, a2)
+  def MakeArray(a1: A) = Unary[T, A](a1)
+  val MakeObject = Prism.partial[MapFunc[T, A], (A, A)] {
+    case Binary(a1, a2) => (a1, a2)
+  } ((Binary[T, A](_, _)).tupled)
+  val ConcatArrays = Prism.partial[MapFunc[T, A], List[A]] {
+    case Variadic(as) => as
+  } (Variadic[T, A](_))
+  val ConcatObjects = Prism.partial[MapFunc[T, A], List[A]] {
+    case Variadic(as) => as
+  } (Variadic[T, A](_))
+  def ProjectIndex(a1: A, a2: A) = Binary[T, A](a1, a2)
+  val ProjectField = Prism.partial[MapFunc[T, A], (A, A)] {
+    case Binary(a1, a2) => (a1, a2)
+  } ((Binary[T, A](_, _)).tupled)
+  def DeleteField(a1: A, a2: A) = Binary[T, A](a1, a2)
 
   // helpers & QScript-specific
-  def StrLit[T[_[_]]: Corecursive, A](str: String) = Nullary[T, A](EJson.Str[T[EJson]](str).embed)
+  def StrLit(str: String)(implicit T: Corecursive[T]) =
+    Nullary[T, A](EJson.Str[T[EJson]](str).embed)
 }

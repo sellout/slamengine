@@ -7,7 +7,7 @@ import sbt._, Keys._
 object Dependencies {
   private val scalazVersion  = "7.2.2"
   private val slcVersion     = "0.4"
-  private val monocleVersion = "1.2.1"
+  private val monocleVersion = "1.2.2"
   private val pathyVersion   = "0.2.0"
   private val http4sVersion  = "0.13.2a"
   private val mongoVersion   = "3.2.2"

@@ -19,7 +19,6 @@ package quasar.config
 import quasar.Predef._
 import quasar.config.FsPath._
 import quasar.Errors.ETask
-import quasar.fp._
 import quasar.fs._
 import quasar.fs.mount.MountingsConfig
 
