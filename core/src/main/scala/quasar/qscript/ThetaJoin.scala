@@ -19,6 +19,7 @@ package quasar.qscript
 import quasar.Predef._
 import quasar.fp._
 
+import matryoshka._
 import monocle.macros.Lenses
 import scalaz._, Scalaz._
 
@@ -35,8 +36,8 @@ import scalaz._, Scalaz._
   */
 @Lenses final case class ThetaJoin[T[_[_]], A](
   src: A,
-  lBranch: JoinBranch[T],
-  rBranch: JoinBranch[T],
+  lBranch: FreeQS[T],
+  rBranch: FreeQS[T],
   on: JoinFunc[T],
   f: JoinType,
   combine: JoinFunc[T])
@@ -87,5 +88,14 @@ object ThetaJoin {
           Some(AbsMerge[IT, ThetaJoin[IT, Unit], FreeMap](p1, UnitF, UnitF))
         else
           None
+    }
+
+  implicit def bucketable[T[_[_]]: Corecursive]:
+      Bucketable.Aux[T, ThetaJoin[T, ?]] =
+    new Bucketable[ThetaJoin[T, ?]] {
+      type IT[G[_]] = T[G]
+
+      def digForBucket: ThetaJoin[T, Inner] => StateT[QScriptBucket[IT, Inner] \/ ?, Int, Inner] =
+        sp => IndexedStateT.stateT(sp.src)
     }
 }

@@ -468,6 +468,14 @@ package object fp
     }
   }
 
+  def liftFG[F[_], G[_], A](orig: F[A] => G[A])(implicit F: F :<: G):
+      G[A] => G[A] =
+    ftf => F.prj(ftf).fold(ftf)(orig)
+
+  def liftFF[F[_], G[_], A](orig: F[A] => F[A])(implicit F: F :<: G):
+      G[A] => G[A] =
+    ftf => F.prj(ftf).fold(ftf)(orig.andThen(F.inj))
+
   implicit final class ListOps[A](val self: List[A]) extends scala.AnyVal {
     final def mapAccumLeft1[B, C](c: C)(f: (C, A) => (C, B)): (C, List[B]) = self.mapAccumLeft(c, f)
   }

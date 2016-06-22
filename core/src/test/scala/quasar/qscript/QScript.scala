@@ -17,51 +17,62 @@
 package quasar.qscript
 
 import quasar.Predef._
-import quasar.LogicalPlan
+import quasar.{LogicalPlan, Data, CompilerHelpers}
+import quasar.{LogicalPlan => LP}
 import quasar.fp._
 import quasar.fs._
+import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
 
-import matryoshka._, FunctorT.ops._
-import org.specs2.mutable._
+import scala.Predef.implicitly
+
+import matryoshka._, TraverseT.ops._
 import org.specs2.scalaz._
 import pathy.Path._
 //import shapeless.contrib.scalaz.instances.deriveEqual
 import scalaz._
 import Scalaz._
 
-class QScriptSpec extends Specification with ScalazMatchers {
+class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val transform = new Transform[Fix]
   import transform._
-  import transform.mf._
 
-  def callIt(lp: Fix[LogicalPlan]): Inner =
+  val optimize = new Optimize[Fix]
+  import optimize._
+
+  val xyz = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
+
+  def callIt(lp: Fix[LP]): InnerPure =
     lp.transCata(lpToQScript)
-       .transCata(liftQSAlgebra(elideNopJoins[QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra(elideNopMaps[QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra2(coalesceMap[QScriptPure[Fix, ?]]))
+       .transCata(xyz.purify)
+       .transCata(liftFG(elideNopJoins[QScriptPure[Fix, ?]]))
+       .transCata(liftFG(elideNopMaps[QScriptPure[Fix, ?]]))
+       .transCata(liftFF(coalesceMap[QScriptPure[Fix, ?]]))
 
-  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed
+  val Z = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]
+  val Y = implicitly[SourcedPathable[Fix, ?] :<: QScriptPure[Fix, ?]]
+
+  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](Z.inj(Const[DeadEnd, InnerPure](Root))).embed
 
   def ProjectFieldR[A](src: FreeMap[Fix], field: FreeMap[Fix]): FreeMap[Fix] =
     Free.roll(ProjectField(src, field))
 
   def StrR[A](s: String): FreeMap[Fix] = Free.roll(StrLit(s))
 
-  def lpRead(path: String): Fix[LogicalPlan] =
+  def lpRead(path: String): Fix[LP] =
     LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile(path).get))
 
   "replan" should {
     "convert a very simple read" in {
       callIt(lpRead("/foo")) must
       equal(
-        F.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
+        Y.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
 
     "convert a simple read" in {
       callIt(lpRead("/some/foo/bar")) must
       equal(
-        F.inj(
+        Y.inj(
           Map(RootR,
             ProjectFieldR(
               ProjectFieldR(
@@ -77,11 +88,33 @@ class QScriptSpec extends Specification with ScalazMatchers {
     "convert a basic invoke" in {
       callIt(math.Add(lpRead("/foo"), lpRead("/bar")).embed) must
       equal(
-        F.inj(
+        Y.inj(
           Map(RootR,
             Free.roll(Add(
               ProjectFieldR(UnitF, StrR("foo")),
               ProjectFieldR(UnitF, StrR("bar")))))).embed)
+    }
+
+    "convert basic join" in {
+      //"select foo.name, bar.address from foo join bar on foo.id = bar.foo_id",
+
+      val lp = LP.Let('__tmp0, lpRead("/foo"),
+        LP.Let('__tmp1, lpRead("/bar"),
+          LP.Let('__tmp2,
+            set.InnerJoin[FLP](LP.Free('__tmp0), LP.Free('__tmp1),
+              relations.Eq[FLP](
+                structural.ObjectProject(LP.Free('__tmp0), LP.Constant(Data.Str("id"))),
+                structural.ObjectProject(LP.Free('__tmp1), LP.Constant(Data.Str("foo_id"))))),
+            makeObj(
+              "name" ->
+                structural.ObjectProject[FLP](
+                  structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("left"))),
+                  LP.Constant(Data.Str("name"))),
+              "address" ->
+                structural.ObjectProject[FLP](
+                  structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("right"))),
+                  LP.Constant(Data.Str("address")))))))
+      callIt(lp) must equal(Y.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
   }
 }
