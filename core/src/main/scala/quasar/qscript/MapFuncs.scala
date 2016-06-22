@@ -95,4 +95,11 @@ class MapFuncs[T[_[_]], A] {
   // helpers & QScript-specific
   def StrLit(str: String)(implicit T: Corecursive[T]) =
     Nullary[T, A](EJson.Str[T[EJson]](str).embed)
+
+  def DubMapKeys(a1: A) = Unary[T, A](a1)
+  def DubArrayIndices(a1: A) = Unary[T, A](a1)
+  def ShiftMapKeys(a1: A) = Unary[T, A](a1)
+  def ShiftArrayIndices(a1: A) = Unary[T, A](a1)
+
+  def Range(a1: A, a2: A) = Binary[T, A](a1, a2)
 }

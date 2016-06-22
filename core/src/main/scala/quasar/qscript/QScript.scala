@@ -272,18 +272,40 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
   // NB: More compilicated LeftShifts are generated as an optimization:
   // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
   // after: LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
-  def invokeLeftShift(
-    func: UnaryFunc,
-    values: Func.Input[Inner, nat._1]): SourcedPathable[T, Inner] =
+  def invokeExpansion1(
+      func: UnaryFunc,
+      values: Func.Input[Inner, nat._1]): SourcedPathable[T, Inner] =
     func match {
-      case structural.FlattenMap => LeftShift(values(0), UnitF, Free.point(RightSide))
-      case structural.FlattenArray => LeftShift(values(0), UnitF, Free.point(RightSide))
-      case structural.ShiftMap => LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
-      case structural.ShiftArray => LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
-      case _ => ???
+      case structural.FlattenMap =>
+        LeftShift(values(0), UnitF, Free.point(RightSide))
+      case structural.FlattenArray =>
+        LeftShift(values(0), UnitF, Free.point(RightSide))
 
-        // ['a', 'b', 'c'] => [0, 1, 2] // custom map func - does not affect bucketing
-        // LeftShift(Map(flattenArrayIndices))
+      case structural.FlattenMapKeys =>
+        LeftShift(values(0), Free.roll(DubMapKeys(UnitF)), Free.point(RightSide))
+      case structural.FlattenArrayIndices =>
+        LeftShift(values(0), Free.roll(DubArrayIndices(UnitF)), Free.point(RightSide))
+
+      // TODO
+      case structural.ShiftMap =>
+        Map(values(0), Free.roll(DubMapKeys(UnitF)))
+        //LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+      case structural.ShiftArray =>
+        Map(values(0), Free.roll(DubArrayIndices(UnitF)))
+        //LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+
+      // TODO ThetaJoin
+      case structural.ShiftMapKeys =>
+        LeftShift(values(0), Free.roll(ShiftMapKeys(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
+      case structural.ShiftArrayIndices =>
+        LeftShift(values(0), Free.roll(ShiftArrayIndices(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
+    }
+
+  def invokeExpansion2(
+      func: BinaryFunc,
+      values: Func.Input[Inner, nat._2]): SourcedPathable[T, Inner] =
+    func match {
+      case set.Range => merge2Map(values)(Range(_,_))  // TODO not really a Map - really a LeftShift?
     }
 
   def translateUnaryMapping[A]: UnaryFunc => A => MapFunc[T, A] = {
@@ -503,7 +525,10 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       }
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
-      F.inj(invokeLeftShift(func, Func.Input1(a1)))
+      F.inj(invokeExpansion1(func, Func.Input1(a1)))
+
+    case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Expansion =>
+      F.inj(invokeExpansion2(func, Func.Input2(a1, a2)))
 
       //// handling bucketing for sorting
       //// e.g. squashing before a reduce puts everything in the same bucket
