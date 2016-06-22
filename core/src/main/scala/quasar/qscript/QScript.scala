@@ -276,29 +276,56 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       func: UnaryFunc,
       values: Func.Input[Inner, nat._1]): SourcedPathable[T, Inner] =
     func match {
+      // id(p, x) - {foo: 12, bar: 18}
+      //   id(a, x:foo) - 12
+      //   id(a, x:bar) - 18
+      //   (one bucket)
       case structural.FlattenMap =>
         LeftShift(values(0), UnitF, Free.point(RightSide))
+
       case structural.FlattenArray =>
         LeftShift(values(0), UnitF, Free.point(RightSide))
 
+      // id(p, x) - {foo: 12, bar: 18}
+      //   id(a, x:foo) - foo
+      //   id(a, x:bar) - bar
+      //   (one bucket)
       case structural.FlattenMapKeys =>
-        LeftShift(values(0), Free.roll(DubMapKeys(UnitF)), Free.point(RightSide))
+        LeftShift(values(0), Free.roll(DupMapKeys(UnitF)), Free.point(RightSide))
       case structural.FlattenArrayIndices =>
-        LeftShift(values(0), Free.roll(DubArrayIndices(UnitF)), Free.point(RightSide))
+        LeftShift(values(0), Free.roll(DupArrayIndices(UnitF)), Free.point(RightSide))
 
-      // TODO
+      // ShiftMap:
+      // id(a, x) - {foo: 12, bar: 18} ->
+      //   id(a, x, foo) - 12
+      //   id(a, x, bar) - 18
+      // "nest"
+      //   id(a, x:foo) - 12
+      //   id(a, x:bar) - 18
+      //
+      // id(p, x) - {foo: 12, bar: 18}
+      // id(p, y) - {foo: 1, bar: 2}
+      //   id(p, x, foo) - 12
+      //   id(p, x, bar) - 18
+      //   id(p, y, foo) - 1
+      //   id(p, y, bar) - 2
+      //   (two buckets)
       case structural.ShiftMap =>
-        Map(values(0), Free.roll(DubMapKeys(UnitF)))
-        //LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects provenance metadata
       case structural.ShiftArray =>
-        Map(values(0), Free.roll(DubArrayIndices(UnitF)))
-        //LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
+        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects provenance metadata
 
-      // TODO ThetaJoin
+      // id(p, x) - {foo: 12, bar: 18}
+      // id(p, y) - {foo: 1, bar: 2}
+      //   id(p, x, foo) - foo
+      //   id(p, x, bar) - bar
+      //   id(p, y, foo) - foo
+      //   id(p, y, bar) - bar
+      //   (two buckets)
       case structural.ShiftMapKeys =>
-        LeftShift(values(0), Free.roll(ShiftMapKeys(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
+        LeftShift(values(0), Free.roll(DupMapKeys(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
       case structural.ShiftArrayIndices =>
-        LeftShift(values(0), Free.roll(ShiftArrayIndices(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
+        LeftShift(values(0), Free.roll(DupArrayIndices(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
     }
 
   def invokeExpansion2(
@@ -582,12 +609,14 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
     case LogicalPlan.LetF(name, form, body) =>
       val AbsMerge(src, jb1, jb2) = merge(form, body)
       makeBasicTheta(src, jb1, jb2) match {
-        case AbsMerge(src, tj1, tj2) =>
+        case AbsMerge(src, fm1, fm2) =>
           F.inj(Map(
-            F.inj(Map(  // TODO is this the correct common source?
+            F.inj(Map(
               H.inj(src).embed,
-              Free.roll(MakeObject(Free.roll(StrLit(name.toString)), tj1)))).embed,
-            tj2))
+              Free.roll(ConcatObjects(List(
+                Free.roll(MakeObject(Free.roll(StrLit("tmp1")), UnitF[T])),
+                Free.roll(MakeObject(Free.roll(StrLit(name.toString)), fm1))))))).embed,
+            rebase(fm2, Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp1")))))))
       }
 
 
