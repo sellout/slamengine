@@ -19,85 +19,75 @@ package quasar.qscript
 import quasar.Predef._
 
 import matryoshka._
-import monocle.Prism
 
-class MapFuncs[T[_[_]], A] {
+object MapFuncs {
   // array
-  def Length(a1: A) = Unary[T, A](a1)
+  final case class Length[T[_[_]], A](a1: A) extends Unary[T, A]
 
   // date
-  def Date(a1: A) = Unary[T, A](a1)
-  def Time(a1: A) = Unary[T, A](a1)
-  def Timestamp(a1: A) = Unary[T, A](a1)
-  def Interval(a1: A) = Unary[T, A](a1)
-  def TimeOfDay(a1: A) = Unary[T, A](a1)
-  def ToTimestamp(a1: A) = Unary[T, A](a1)
-  def Extract(a1: A, a2: A) = Binary[T, A](a1, a2)
+  final case class Date[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Time[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Timestamp[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Interval[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class TimeOfDay[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class ToTimestamp[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Extract[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   // math
-  def Negate(a1: A) = Unary[T, A](a1)
-  def Add(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Multiply(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Subtract(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Divide(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Modulo(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Power(a1: A, a2: A) = Binary[T, A](a1, a2)
+  final case class Negate[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Add[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Multiply[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Subtract[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Divide[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Modulo[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Power[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   // relations
-  def Not(a1: A) = Unary[T, A](a1)
-  def Eq(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Neq(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Lt(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Lte(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Gt(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Gte(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def IfUndefined(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def And(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Or(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Coalesce(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Between(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Cond(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  final case class Not[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Eq[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Neq[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Lt[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Lte[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Gt[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Gte[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class IfUndefined[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class And[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Or[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Coalesce[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Between[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
+  final case class Cond[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
 
   // set
-  def In(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Within(a1: A, a2: A) = Binary[T, A](a1, a2)
-  def Constantly(a1: A, a2: A) = Binary[T, A](a1, a2)
+  final case class In[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Within[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class Constantly[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   // string
-  def Lower(a1: A) = Unary[T, A](a1)
-  def Upper(a1: A) = Unary[T, A](a1)
-  def Boolean(a1: A) = Unary[T, A](a1)
-  def Integer(a1: A) = Unary[T, A](a1)
-  def Decimal(a1: A) = Unary[T, A](a1)
-  def Null(a1: A) = Unary[T, A](a1)
-  def ToString(a1: A) = Unary[T, A](a1)
-  def Like(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Search(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
-  def Substring(a1: A, a2: A, a3: A) = Ternary[T, A](a1, a2, a3)
+  final case class Lower[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Upper[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Bool[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Integer[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Decimal[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Null[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class ToString[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Like[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
+  final case class Search[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
+  final case class Substring[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
 
   // structural
-  def MakeArray(a1: A) = Unary[T, A](a1)
-  val MakeObject = Prism.partial[MapFunc[T, A], (A, A)] {
-    case Binary(a1, a2) => (a1, a2)
-  } ((Binary[T, A](_, _)).tupled)
-  val ConcatArrays = Prism.partial[MapFunc[T, A], List[A]] {
-    case Variadic(as) => as
-  } (Variadic[T, A](_))
-  val ConcatObjects = Prism.partial[MapFunc[T, A], List[A]] {
-    case Variadic(as) => as
-  } (Variadic[T, A](_))
-  def ProjectIndex(a1: A, a2: A) = Binary[T, A](a1, a2)
-  val ProjectField = Prism.partial[MapFunc[T, A], (A, A)] {
-    case Binary(a1, a2) => (a1, a2)
-  } ((Binary[T, A](_, _)).tupled)
-  def DeleteField(a1: A, a2: A) = Binary[T, A](a1, a2)
+  final case class MakeArray[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class MakeObject[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class ConcatArrays[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class ConcatObjects[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class ProjectIndex[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class ProjectField[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+  final case class DeleteField[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   // helpers & QScript-specific
-  def StrLit(str: String)(implicit T: Corecursive[T]) =
+  final case class DupMapKeys[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class DupArrayIndices[T[_[_]], A](a1: A) extends Unary[T, A]
+  final case class Range[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
+
+  def StrLit[T[_[_]], A](str: String)(implicit T: Corecursive[T]) =
     Nullary[T, A](EJson.Str[T[EJson]](str).embed)
-
-  def DupMapKeys(a1: A) = Unary[T, A](a1)
-  def DupArrayIndices(a1: A) = Unary[T, A](a1)
-
-  def Range(a1: A, a2: A) = Binary[T, A](a1, a2)
 }

@@ -18,6 +18,7 @@ package quasar.qscript
 
 import quasar._
 import quasar.fp._
+import quasar.qscript.MapFuncs._
 import quasar.Predef._
 import quasar.std.StdLib._
 
@@ -26,7 +27,7 @@ import scala.Predef.implicitly
 import matryoshka._, FunctorT.ops._, Recursive.ops._
 import matryoshka.patterns._
 import pathy.Path._
-import scalaz.{:+: => _, _}, Scalaz._, Inject._, Leibniz._
+import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._
 import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -39,7 +40,12 @@ import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
 // TODO use real EJson when it lands in master
 sealed trait EJson[A]
 object EJson {
-  def toEJson[T[_[_]]](data: Data): T[EJson] = ???
+  def toEJson[T[_[_]]: Corecursive](data: Data): T[EJson] = data match {
+    case Data.Str(str) => Str[T[EJson]](str).embed
+    case Data.Null => Null[T[EJson]]().embed
+    case Data.Bool(bool) => Bool[T[EJson]](bool).embed
+    case _ => Null[T[EJson]]().embed
+  }
 
   final case class Null[A]() extends EJson[A]
   final case class Bool[A](b: Boolean) extends EJson[A]
@@ -167,11 +173,7 @@ object EquiJoin {
     }
 }
 
-class Transform[T[_[_]]: Recursive: Corecursive] {
-  val mf = new MapFuncs[T, FreeMap[T]]
-  import mf._
-  val jf = new MapFuncs[T, JoinFunc[T]]
-
+class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScriptPure[T, ?]]], eqTEj: Equal[T[EJson]]) {
   type Inner = T[QScriptPure[T, ?]]
 
   type Pures[A] = List[QScriptPure[T, A]]
@@ -263,9 +265,9 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       Merge[T, ThetaJoin[T, A]] =
     AbsMerge[T, ThetaJoin[T, A], FreeMap](
       ThetaJoin(src, left, right, basicJF, Inner,
-        Free.roll(jf.ConcatObjects(List(
-          Free.roll(jf.MakeObject(Free.roll(jf.StrLit("tmp1")), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-          Free.roll(jf.MakeObject(Free.roll(jf.StrLit("tmp2")), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))),
+        Free.roll(ConcatObjects(
+          Free.roll(MakeObject(Free.roll(StrLit("tmp1")), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
+          Free.roll(MakeObject(Free.roll(StrLit("tmp2")), Free.point[MapFunc[T, ?], JoinSide](RightSide)))))),
       Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp1")))),
       Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp2")))))
 
@@ -336,9 +338,6 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
     }
 
   def translateUnaryMapping[A]: UnaryFunc => A => MapFunc[T, A] = {
-    val mf = new MapFuncs[T, A]
-    import mf._
-
     {
       case date.Date => Date(_)
       case date.Time => Time(_)
@@ -351,7 +350,7 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       case string.Length => Length(_)
       case string.Lower => Lower(_)
       case string.Upper => Upper(_)
-      case string.Boolean => Boolean(_)
+      case string.Boolean => Bool(_)
       case string.Integer => Integer(_)
       case string.Decimal => Decimal(_)
       case string.Null => Null(_)
@@ -361,9 +360,6 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
   }
 
   def translateBinaryMapping[A]: BinaryFunc => (A, A) => MapFunc[T, A] = {
-    val mf = new MapFuncs[T, A]
-    import mf._
-
     {
       // NB: ArrayLength takes 2 params because of SQL, but we really don’t care
       //     about the second. And it shouldn’t even have two in LP.
@@ -389,21 +385,18 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       case set.Within => Within(_, _)
       case set.Constantly => Constantly(_, _)
       case structural.MakeObject => MakeObject(_, _)
-      case structural.ObjectConcat => (l, r) => ConcatObjects(List(l, r))
+      case structural.ObjectConcat => ConcatObjects(_, _)
       case structural.ArrayProject => ProjectIndex(_, _)
       case structural.ObjectProject => ProjectField(_, _)
       case structural.DeleteField => DeleteField(_, _)
       case string.Concat
          | structural.ArrayConcat
-         | structural.ConcatOp => (l, r) => ConcatArrays(List(l, r))
+         | structural.ConcatOp => ConcatArrays(_, _)
     }
   }
 
   def translateTernaryMapping[A]:
       TernaryFunc => (A, A, A) => MapFunc[T, A] = {
-    val mf = new MapFuncs[T, A]
-    import mf._
-
     {
       case relations.Between => Between(_, _, _)
       case relations.Cond    => Cond(_, _, _)
@@ -471,18 +464,17 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
   }
 
   def basicJF: JoinFunc[T] =
-    Free.roll(jf.Eq(Free.point(LeftSide), Free.point(RightSide)))
+    Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
 
   def elideNopMaps[F[_]: Functor](
-    implicit EqT: Equal[T[EJson]], SP: SourcedPathable[T, ?] :<: F):
+    implicit SP: SourcedPathable[T, ?] :<: F):
       SourcedPathable[T, T[F]] => F[T[F]] = {
     case Map(src, mf) if mf ≟ UnitF => src.project
     case x                          => SP.inj(x)
   }
 
   def elideNopJoins[F[_]](
-    implicit EqT: Equal[T[EJson]],
-    Th: ThetaJoin[T, ?] :<: F,
+    implicit Th: ThetaJoin[T, ?] :<: F,
     SP: SourcedPathable[T, ?] :<: F):
       ThetaJoin[T, T[F]] => F[T[F]] = {
     case ThetaJoin(src, l, r, on, _, combine)
@@ -597,6 +589,10 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       def invoke(tpe: JoinType): QScriptPure[T, Inner] =
         H.inj(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
 
+      scala.Predef.println(s"left:  ${a1.shows}")
+      scala.Predef.println(s"right: ${a2.shows}")
+      scala.Predef.println(s"cond:  ${a3.transCata(liftQSAlgebra(elideNopJoins[QScriptPure[T, ?]])).shows}")
+
       func match {
         case set.InnerJoin => invoke(Inner)
         case set.LeftOuterJoin => invoke(LeftOuter)
@@ -613,13 +609,13 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
           F.inj(Map(
             F.inj(Map(
               H.inj(src).embed,
-              Free.roll(ConcatObjects(List(
+              Free.roll(ConcatObjects(
                 Free.roll(MakeObject(Free.roll(StrLit("tmp1")), UnitF[T])),
-                Free.roll(MakeObject(Free.roll(StrLit(name.toString)), fm1))))))).embed,
+                Free.roll(MakeObject(Free.roll(StrLit(name.toString)), fm1)))))).embed,
             rebase(fm2, Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp1")))))))
       }
 
 
-    case _ => ??? // TODO
+    //case _ => ??? // TODO
   }
 }

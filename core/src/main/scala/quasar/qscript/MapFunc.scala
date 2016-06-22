@@ -19,15 +19,24 @@ package quasar.qscript
 import quasar.Predef._
 import quasar.fp._
 
-// import matryoshka._
-import scalaz._, Scalaz._
+import scalaz._
 
 sealed trait MapFunc[T[_[_]], A]
-final case class Nullary[T[_[_]], A](value: T[EJson])     extends MapFunc[T, A]
-final case class Unary[T[_[_]], A](a1: A)                 extends MapFunc[T, A]
-final case class Binary[T[_[_]], A](a1: A, a2: A)         extends MapFunc[T, A]
-final case class Ternary[T[_[_]], A](a1: A, a2: A, a3: A) extends MapFunc[T, A]
-final case class Variadic[T[_[_]], A](as: List[A])        extends MapFunc[T, A]
+
+final case class Nullary[T[_[_]], A](ejson: T[EJson]) extends MapFunc[T, A]
+
+trait Unary[T[_[_]], A] extends MapFunc[T, A] {
+  def a1: A
+}
+trait Binary[T[_[_]], A] extends MapFunc[T, A] {
+  def a1: A
+  def a2: A
+}
+trait Ternary[T[_[_]], A] extends MapFunc[T, A] {
+  def a1: A
+  def a2: A
+  def a3: A
+}
 
 object MapFunc {
   // TODO: The `T` passed to MapFunc and the `T` wrapping MapFunc should be distinct
@@ -60,6 +69,16 @@ object MapFunc {
   //       }
   //   }
   // }
+  import MapFuncs._
+
+  implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
+    def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
+      fa match {
+        case Nullary(v) => Nullary[T, B](v)
+        case Negate(a1) => Negate(f(a1))
+        case _ => ???
+      }
+  }
 
   implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]):
       Delay[Equal, MapFunc[T, ?]] =
@@ -67,32 +86,17 @@ object MapFunc {
       // TODO this is wrong - we need to define equality on a function by function basis
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
-        case (Unary(a1), Unary(a2)) => in.equal(a1, a2)
-        case (Binary(a11, a12), Binary(a21, a22)) => in.equal(a11, a21) && in.equal(a12, a22)
-        case (Ternary(a11, a12, a13), Ternary(a21, a22, a23)) => in.equal(a11, a21) && in.equal(a12, a22) && in.equal(a13, a23)
+        case (Negate(a1), Negate(a2)) => in.equal(a1, a1)
         case (_, _) => false
       }
     }
-
-  implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
-    def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
-      fa match {
-        case Nullary(v)          => Nullary[T, B](v)
-        case Unary(a1)           => Unary(f(a1))
-        case Binary(a1, a2)      => Binary(f(a1), f(a2))
-        case Ternary(a1, a2, a3) => Ternary(f(a1), f(a2), f(a3))
-        case Variadic(as)        => Variadic(as ∘ f)
-      }
-  }
 
   implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
     new Delay[Show, MapFunc[T, ?]] {
       def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
         case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
-        case Unary(a1) => Cord("Unary(") ++ sh.show(a1) ++ Cord(")")
-        case Binary(a1, a2) => Cord("Binary(") ++ sh.show(a1) ++ sh.show(a2) ++ Cord(")")
-        case Ternary(a1, a2, a3) => Cord("Ternary(") ++ sh.show(a1) ++ sh.show(a2) ++ sh.show(a3) ++ Cord(")")
-        case Variadic(as) => Cord("Variadic(") ++ as.map(sh.show).intercalate(Cord(", ")) ++ Cord(")")
+        case Negate(a1) => Cord("Negate(") ++ sh.show(a1) ++ Cord(")")
+        case _ => ???
       }
     }
 }

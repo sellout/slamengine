@@ -18,6 +18,7 @@ package quasar.qscript
 
 import quasar.Predef._
 import quasar.fp._
+import quasar.qscript.MapFuncs._
 
 import matryoshka._
 import scalaz._, Scalaz._
@@ -106,9 +107,6 @@ object SourcedPathable {
     new Mergeable[SourcedPathable[T, Unit]] {
       type IT[F[_]] = T[F]
 
-      val mf = new MapFuncs[IT, FreeMap[IT]]
-      import mf._
-
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
@@ -117,14 +115,14 @@ object SourcedPathable {
         (p1, p2) match {
           case (Map(_, m1), Map(_, m2)) => {
             val lf =
-              Free.roll(ProjectField(UnitF[IT], Free.roll[MapFunc[IT, ?], Unit](StrLit("tmp1"))))
+              Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], Free.roll[MapFunc[IT, ?], Unit](StrLit[IT, FreeMap[IT]]("tmp1"))))
             val rf =
-              Free.roll(ProjectField(UnitF[IT], Free.roll[MapFunc[IT, ?], Unit](StrLit("tmp2"))))
+              Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], Free.roll[MapFunc[IT, ?], Unit](StrLit[IT, FreeMap[IT]]("tmp2"))))
 
             AbsMerge[IT, SourcedPathable[IT, Unit], FreeMap](Map((), Free.roll[MapFunc[IT, ?], Unit](
-              ConcatObjects(List(
-                Free.roll[MapFunc[IT, ?], Unit](MakeObject(Free.roll(StrLit("tmp1")), rebase(m1, left))),
-                Free.roll[MapFunc[IT, ?], Unit](MakeObject(Free.roll(StrLit("tmp2")), rebase(m2, right))))))),
+              ConcatObjects(
+                Free.roll[MapFunc[IT, ?], Unit](MakeObject(Free.roll(StrLit[IT, FreeMap[IT]]("tmp1")), rebase(m1, left))),
+                Free.roll[MapFunc[IT, ?], Unit](MakeObject(Free.roll(StrLit[IT, FreeMap[IT]]("tmp2")), rebase(m2, right)))))),
               lf, rf).some
           }
           case _ => None

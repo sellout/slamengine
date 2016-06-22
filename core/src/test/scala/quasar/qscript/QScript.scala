@@ -17,25 +17,25 @@
 package quasar.qscript
 
 import quasar.Predef._
-import quasar.LogicalPlan
+import quasar.{LogicalPlan, Data, CompilerHelpers}
+import quasar.{LogicalPlan => LP}
 import quasar.fp._
 import quasar.fs._
+import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
 
 import matryoshka._, FunctorT.ops._
-import org.specs2.mutable._
 import org.specs2.scalaz._
 import pathy.Path._
 //import shapeless.contrib.scalaz.instances.deriveEqual
 import scalaz._
 import Scalaz._
 
-class QScriptSpec extends Specification with ScalazMatchers {
+class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val transform = new Transform[Fix]
   import transform._
-  import transform.mf._
 
-  def callIt(lp: Fix[LogicalPlan]): Inner =
+  def callIt(lp: Fix[LP]): Inner =
     lp.transCata(lpToQScript)
        .transCata(liftQSAlgebra(elideNopJoins[QScriptPure[Fix, ?]]))
        .transCata(liftQSAlgebra(elideNopMaps[QScriptPure[Fix, ?]]))
@@ -48,7 +48,7 @@ class QScriptSpec extends Specification with ScalazMatchers {
 
   def StrR[A](s: String): FreeMap[Fix] = Free.roll(StrLit(s))
 
-  def lpRead(path: String): Fix[LogicalPlan] =
+  def lpRead(path: String): Fix[LP] =
     LogicalPlan.Read(sandboxAbs(posixCodec.parseAbsFile(path).get))
 
   "replan" should {
@@ -82,6 +82,26 @@ class QScriptSpec extends Specification with ScalazMatchers {
             Free.roll(Add(
               ProjectFieldR(UnitF, StrR("foo")),
               ProjectFieldR(UnitF, StrR("bar")))))).embed)
+    }
+
+    "convert basic join" in {
+      val lp = LP.Let('__tmp0, lpRead("/foo"),
+        LP.Let('__tmp1, lpRead("/bar"),
+          LP.Let('__tmp2,
+            set.InnerJoin[FLP](LP.Free('__tmp0), LP.Free('__tmp1),
+              relations.Eq[FLP](
+                structural.ObjectProject(LP.Free('__tmp0), LP.Constant(Data.Str("id"))),
+                structural.ObjectProject(LP.Free('__tmp1), LP.Constant(Data.Str("foo_id"))))),
+            makeObj(
+              "name" ->
+                structural.ObjectProject[FLP](
+                  structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("left"))),
+                  LP.Constant(Data.Str("name"))),
+              "address" ->
+                structural.ObjectProject[FLP](
+                  structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("right"))),
+                  LP.Constant(Data.Str("address")))))))
+      callIt(lp) must equal(F.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
   }
 }
