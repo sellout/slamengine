@@ -84,6 +84,7 @@ object MapFunc {
         case ConcatObjects(a1, a2) => ConcatObjects(f(a1), f(a2))
         case ProjectField(a1, a2) => ProjectField(f(a1), f(a2))
         case Eq(a1, a2) => Eq(f(a1), f(a2))
+        case Add(a1, a2) => Add(f(a1), f(a2))
         case x => { scala.Predef.print(s">>>>>>>>>>> got a functor $x"); ??? }
       }
   }
@@ -95,6 +96,11 @@ object MapFunc {
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
         case (Negate(a1), Negate(a2)) => in.equal(a1, a1)
+        case (ConcatObjects(l1, l2), ConcatObjects(r1, r2)) => in.equal(l1, r1) && in.equal(l2, r2)
+        case (ProjectField(l1, l2), ProjectField(r1, r2)) => in.equal(l1, r1) && in.equal(l2, r2)
+        case (MakeObject(l1, l2), MakeObject(r1, r2)) => in.equal(l1, r1) && in.equal(l2, r2)
+        case (Eq(l1, l2), Eq(r1, r2)) => in.equal(l1, r1) && in.equal(l2, r2)
+        case (Add(l1, l2), Add(r1, r2)) => in.equal(l1, r1) && in.equal(l2, r2)
         case (_, _) => false
       }
     }
@@ -108,6 +114,7 @@ object MapFunc {
         case ConcatObjects(a1, a2) => Cord("ConcatObjects(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case ProjectField(a1, a2) => Cord("ProjectField(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case Eq(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Add(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case x => { scala.Predef.print(s">>>>>>>>>>> got a show $x"); ??? }
       }
     }
