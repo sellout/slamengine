@@ -431,6 +431,18 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       Sized[List](translateReduction[FreeMap[T]](func)(UnitF)),
       Free.point(Fin[nat._0, nat._1]))
 
+  def invokeThetaJoin(input: Func.Input[Inner, nat._3], tpe: JoinType): ThetaJoin[T, Inner] = {
+    val AbsMerge(src1, jb1l, jb1r) = merge(input(0), input(1))
+    val AbsMerge(src2, jb2l, jb2r) = merge(src1, input(2))
+
+    val leftBr = rebaseJoin(jb2l, jb1l)
+    val rightBr = rebaseJoin(jb2l, jb1r)
+
+    val on: JoinFunc[T] = basicJF // TODO use jb2r
+
+    ThetaJoin(src2, leftBr, rightBr, on, Inner, Free.point(LeftSide))
+  }
+
   def basicJF: JoinFunc[T] =
     Free.roll(jf.Eq(Free.point(LeftSide), Free.point(RightSide)))
 
@@ -540,7 +552,7 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
       //// z := select sum(pop) from zips group by city
       //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Squashing => ??? // returning the source with added metadata - mutiple buckets
 
-    case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) => {
+    case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) =>
       func match {
         case set.GroupBy => a1.project // FIXME: add a2 to state
         case set.Union =>
@@ -553,16 +565,17 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
           H.inj(ThetaJoin(src, jb1, jb2, Free.roll(Nullary(EJson.Bool[T[EJson]](false).embed)), LeftOuter, Free.point(LeftSide)))
       }
-    }
-      //case LogicalPlan.InvokeF(func @ TernaryFunc, input) => {
-      //  func match {
-      //    // src is Root() - and we rewrite lBranch/rBranch so that () refers to Root()
-      //    case InnerJoin => ThetaJoin(input(2), Inner, Root(), input(0), input(1)) // TODO use input(2)
-      //    case LeftOuterJoin => ThetaJoin(input(2), LeftOuter, Root(), input(0), input(1)) // TODO use input(2)
-      //    case RightOuterJoin => ???
-      //    case FullOuterJoin => ???
-      //  }
-      //}
+
+    case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) =>
+      def invoke(tpe: JoinType): QScriptPure[T, Inner] =
+        H.inj(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
+
+      func match {
+        case set.InnerJoin => invoke(Inner)
+        case set.LeftOuterJoin => invoke(LeftOuter)
+        case set.RightOuterJoin => invoke(RightOuter)
+        case set.FullOuterJoin => invoke(FullOuter)
+      }
 
       //// Map(src=form, MakeObject(name, ()))
       //// Map(Map(src=form, MakeObject(name, ())), body)

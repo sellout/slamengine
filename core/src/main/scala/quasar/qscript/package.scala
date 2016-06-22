@@ -82,10 +82,14 @@ package object qscript {
   // replace Unit in `in` with `field`
   def rebase[T[_[_]]](in: FreeMap[T], field: FreeMap[T]): FreeMap[T] = in >> field
 
+  // replace Unit in `in` with `field`
+  def rebaseJoin[T[_[_]]](in: JoinBranch[T], field: JoinBranch[T]): JoinBranch[T] = in >> field
+
   // TODO this should be found from matryoshka - why isn't it being found!?!?
   implicit def NTEqual[F[_], A](implicit F: Delay[Equal, F], A: Equal[A]):
       Equal[F[A]] =
     F(A)
+
   implicit def NTShow[F[_], A](implicit F: Delay[Show, F], A: Show[A]):
       Show[F[A]] =
     F(A)
