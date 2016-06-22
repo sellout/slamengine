@@ -577,9 +577,19 @@ class Transform[T[_[_]]: Recursive: Corecursive] {
         case set.FullOuterJoin => invoke(FullOuter)
       }
 
-      //// Map(src=form, MakeObject(name, ()))
-      //// Map(Map(src=form, MakeObject(name, ())), body)
-      //case LogicalPlan.LetF(name, form, body) => rewriteLet(body)(qsRewrite(name, form))
+    // Map(src=form, MakeObject(name, ()))
+    // Map(Map(src=form, MakeObject(name, ())), body)
+    case LogicalPlan.LetF(name, form, body) =>
+      val AbsMerge(src, jb1, jb2) = merge(form, body)
+      makeBasicTheta(src, jb1, jb2) match {
+        case AbsMerge(src, tj1, tj2) =>
+          F.inj(Map(
+            F.inj(Map(  // TODO is this the correct common source?
+              H.inj(src).embed,
+              Free.roll(MakeObject(Free.roll(StrLit(name.toString)), tj1)))).embed,
+            tj2))
+      }
+
 
     case _ => ??? // TODO
   }
