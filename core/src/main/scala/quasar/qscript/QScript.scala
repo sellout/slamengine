@@ -402,8 +402,8 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     val AbsMerge(src1, jb1l, jb1r) = merge(input(0), input(1))
     val AbsMerge(src2, jb2l, jb2r) = merge(src1, input(2))
 
-    val leftBr = rebaseJoin(jb2l, jb1l)
-    val rightBr = rebaseJoin(jb2l, jb1r)
+    val leftBr = rebase(jb2l, jb1l)
+    val rightBr = rebase(jb2l, jb1r)
 
     val on: JoinFunc[T] = basicJF // TODO use jb2r
 

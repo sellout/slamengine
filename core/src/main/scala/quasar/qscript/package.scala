@@ -66,9 +66,12 @@ package object qscript {
     implicit val show: Show[JoinSide] = Show.showFromToString
   }
 
-  type FreeMap[T[_[_]]] = Free[MapFunc[T, ?], Unit]
+  type FreeUnit[T[_[_]], F[_]] = Free[F, Unit]
+
+  type FreeMap[T[_[_]]] = FreeUnit[T, MapFunc[T, ?]]
+  type JoinBranch[T[_[_]]] = FreeUnit[T, QScriptPure[T, ?]]
+
   type JoinFunc[T[_[_]]] = Free[MapFunc[T, ?], JoinSide]
-  type JoinBranch[T[_[_]]] = Free[QScriptPure[T, ?], Unit]
 
   def UnitF[T[_[_]]] = Free.point[MapFunc[T, ?], Unit](())
   final case class AbsMerge[T[_[_]], A, Q[_[_[_]]]](
@@ -79,11 +82,11 @@ package object qscript {
   type Merge[T[_[_]], A] = AbsMerge[T, A, FreeMap]
   type MergeJoin[T[_[_]], A] = AbsMerge[T, A, JoinBranch]
 
-  // replace Unit in `in` with `field`
-  def rebase[T[_[_]]](in: FreeMap[T], field: FreeMap[T]): FreeMap[T] = in >> field
-
-  // replace Unit in `in` with `field`
-  def rebaseJoin[T[_[_]]](in: JoinBranch[T], field: JoinBranch[T]): JoinBranch[T] = in >> field
+  // replace `Unit` in `src` with `replacement`
+  def rebase[T[_[_]], F[_]](
+      src: FreeUnit[T, F],
+      replacement: FreeUnit[T, F]): FreeUnit[T, F] =
+    src >> replacement
 
   // TODO this should be found from matryoshka - why isn't it being found!?!?
   implicit def NTEqual[F[_], A](implicit F: Delay[Equal, F], A: Equal[A]):
