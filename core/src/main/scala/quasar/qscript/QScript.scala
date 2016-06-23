@@ -173,10 +173,22 @@ object EquiJoin {
     }
 }
 
-class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScriptPure[T, ?]]], eqTEj: Equal[T[EJson]]) {
+trait Helpers[T[_[_]]] {
+  def basicJF: JoinFunc[T] =
+    Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
+}
+
+class Transform[T[_[_]]: Recursive: Corecursive](
+    implicit showInner: Show[T[QScriptPure[T, ?]]],
+             eqTEj: Equal[T[EJson]]) extends Helpers[T] {
+
   type Inner = T[QScriptPure[T, ?]]
 
   type Pures[A] = List[QScriptPure[T, A]]
+  type DoublePures = (Pures[Unit], Pures[Unit])
+  type TriplePures = (Pures[Unit], Pures[Unit], Pures[Unit])
+
+  type DoubleFreeMap = (FreeMap[T], FreeMap[T])
 
   val E = implicitly[Const[DeadEnd, ?] :<: QScriptPure[T, ?]]
   val F = implicitly[SourcedPathable[T, ?] :<: QScriptPure[T, ?]]
@@ -197,10 +209,6 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
     case Nil    => ().left
     case h :: t => h.map(_ => t).right
   }
-
-  type DoublePures = (Pures[Unit], Pures[Unit])
-  type DoubleFreeMap = (FreeMap[T], FreeMap[T])
-  type TriplePures = (Pures[Unit], Pures[Unit], Pures[Unit])
 
   val consZipped: Algebra[ListF[QScriptPure[T, Unit], ?], TriplePures] = {
     case NilF() => (Nil, Nil, Nil)
@@ -402,45 +410,6 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
     ThetaJoin(src2, leftBr, rightBr, on, Inner, Free.point(LeftSide))
   }
 
-  def basicJF: JoinFunc[T] =
-    Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
-
-  def elideNopMaps[F[_]: Functor](
-    implicit SP: SourcedPathable[T, ?] :<: F):
-      SourcedPathable[T, T[F]] => F[T[F]] = {
-    case Map(src, mf) if mf ≟ UnitF => src.project
-    case x                          => SP.inj(x)
-  }
-
-  def elideNopJoins[F[_]](
-    implicit Th: ThetaJoin[T, ?] :<: F,
-    SP: SourcedPathable[T, ?] :<: F):
-      ThetaJoin[T, T[F]] => F[T[F]] = {
-    case ThetaJoin(src, l, r, on, _, combine)
-        if l ≟ Free.point(()) && r ≟ Free.point(()) && on ≟ basicJF =>
-      SP.inj(Map(src, combine.void))
-    case x => Th.inj(x)
-  }
-
-  // TODO write extractor for inject
-  def coalesceMap[F[_]: Functor](
-    implicit SP: SourcedPathable[T, ?] :<: F):
-      SourcedPathable[T, T[F]] => SourcedPathable[T, T[F]] = {
-    case x @ Map(Embed(src), mf) => SP.prj(src) match {
-      case Some(Map(srcInner, mfInner)) => Map(srcInner, rebase(mf, mfInner))
-      case _ => x
-    }
-    case x => x
-  }
-
-  def liftQSAlgebra[F[_], G[_], A](orig: F[A] => G[A])(implicit F: F :<: G):
-      G[A] => G[A] =
-    ftf => F.prj(ftf).fold(ftf)(orig)
-
-  def liftQSAlgebra2[F[_], G[_], A](orig: F[A] => F[A])(implicit F: F :<: G):
-      G[A] => G[A] =
-    ftf => F.prj(ftf).fold(ftf)(orig.andThen(F.inj))
-
   def pathToProj(path: pathy.Path[_, _, _]): FreeMap[T] =
     pathy.Path.peel(path).fold[FreeMap[T]](
       Free.point(())) {
@@ -531,7 +500,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
 
       scala.Predef.println(s"left:  ${a1.shows}")
       scala.Predef.println(s"right: ${a2.shows}")
-      scala.Predef.println(s"cond:  ${a3.transCata(liftQSAlgebra(elideNopJoins[QScriptPure[T, ?]])).shows}")
+      scala.Predef.println(s"cond:  ${a3.transCata(liftFG((new Optimize[T]).elideNopJoins[QScriptPure[T, ?]])).shows}")
 
       func match {
         case set.InnerJoin => invoke(Inner)
@@ -541,7 +510,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
       }
 
     // Map(src=form, MakeObject(name, ()))
-    // Map(Map(src=form, MakeObject(name, ())), body)
+    // Map(Map(src=form, MakeObject(namr, ())), body)
     case LogicalPlan.LetF(name, form, body) =>
       val AbsMerge(src, jb1, jb2) = merge(form, body)
       makeBasicTheta(src, jb1, jb2) match {
@@ -555,7 +524,38 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
             rebase(fm2, Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp1")))))))
       }
 
-
     //case _ => ??? // TODO
+  }
+}
+
+class Optimize[T[_[_]]: Recursive: Corecursive](
+    implicit eqTEj: Equal[T[EJson]]) extends Helpers[T] {
+
+  def elideNopMaps[F[_]: Functor](
+    implicit SP: SourcedPathable[T, ?] :<: F):
+      SourcedPathable[T, T[F]] => F[T[F]] = {
+    case Map(src, mf) if mf ≟ UnitF => src.project
+    case x                          => SP.inj(x)
+  }
+
+  def elideNopJoins[F[_]](
+    implicit Th: ThetaJoin[T, ?] :<: F,
+    SP: SourcedPathable[T, ?] :<: F):
+      ThetaJoin[T, T[F]] => F[T[F]] = {
+    case ThetaJoin(src, l, r, on, _, combine)
+        if l ≟ Free.point(()) && r ≟ Free.point(()) && on ≟ basicJF =>
+      SP.inj(Map(src, combine.void))
+    case x => Th.inj(x)
+  }
+
+  // TODO write extractor for inject
+  def coalesceMap[F[_]: Functor](
+    implicit SP: SourcedPathable[T, ?] :<: F):
+      SourcedPathable[T, T[F]] => SourcedPathable[T, T[F]] = {
+    case x @ Map(Embed(src), mf) => SP.prj(src) match {
+      case Some(Map(srcInner, mfInner)) => Map(srcInner, rebase(mf, mfInner))
+      case _ => x
+    }
+    case x => x
   }
 }

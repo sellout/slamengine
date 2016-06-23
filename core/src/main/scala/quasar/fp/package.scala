@@ -489,6 +489,14 @@ package object fp
     }
   }
 
+  def liftFG[F[_], G[_], A](orig: F[A] => G[A])(implicit F: F :<: G):
+      G[A] => G[A] =
+    ftf => F.prj(ftf).fold(ftf)(orig)
+
+  def liftFF[F[_], G[_], A](orig: F[A] => F[A])(implicit F: F :<: G):
+      G[A] => G[A] =
+    ftf => F.prj(ftf).fold(ftf)(orig.andThen(F.inj))
+
   // NB: This should be submitted to mpilquist/monocle
   /** Create a Prism using an partial function rather than Option.
     */

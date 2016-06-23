@@ -35,11 +35,14 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val transform = new Transform[Fix]
   import transform._
 
+  val optimize = new Optimize[Fix]
+  import optimize._
+
   def callIt(lp: Fix[LP]): Inner =
     lp.transCata(lpToQScript)
-       .transCata(liftQSAlgebra(elideNopJoins[QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra(elideNopMaps[QScriptPure[Fix, ?]]))
-       .transCata(liftQSAlgebra2(coalesceMap[QScriptPure[Fix, ?]]))
+       .transCata(liftFG(elideNopJoins[QScriptPure[Fix, ?]]))
+       .transCata(liftFG(elideNopMaps[QScriptPure[Fix, ?]]))
+       .transCata(liftFF(coalesceMap[QScriptPure[Fix, ?]]))
 
   def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed
 
