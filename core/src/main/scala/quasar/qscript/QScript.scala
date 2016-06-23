@@ -243,6 +243,16 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
     Map(H.inj(res.src).embed, Free.roll(func(res.left, res.right)))
   }
 
+  def merge2Expansion(
+    values: Func.Input[Inner, nat._2])(
+    func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
+      SourcedPathable[T, Inner] = {
+    val AbsMerge(merged, left, right) = merge(values(0), values(1))
+    val res = makeBasicTheta(merged, left, right)
+
+    LeftShift(H.inj(res.src).embed, Free.roll(func(res.left, res.right)), Free.point(RightSide))
+  }
+
   def merge3Map(
     values: Func.Input[Inner, nat._3])(
     func: (FreeMap[T], FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]])(
@@ -274,14 +284,26 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
   // NB: More compilicated LeftShifts are generated as an optimization:
   // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
   // after: LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
+  //
+  // Flatten is Shift + Nest
+  // Shift:
+  // id(a, x) - {foo: 12, bar: 18} ->
+  //   id(a, x, foo) - 12
+  //   id(a, x, bar) - 18
+  // Nest:
+  //   id(a, x:foo) - 12
+  //   id(a, x:bar) - 18
   def invokeExpansion1(
       func: UnaryFunc,
       values: Func.Input[Inner, nat._1]): SourcedPathable[T, Inner] =
     func match {
       // id(p, x) - {foo: 12, bar: 18}
-      //   id(a, x:foo) - 12
-      //   id(a, x:bar) - 18
-      //   (one bucket)
+      // id(p, y) - {foo: 1, bar: 2}
+      //   id(p, x:foo) - 12
+      //   id(p, x:bar) - 18
+      //   id(p, x:foo) - 1
+      //   id(p, x:bar) - 2
+      // (one bucket)
       case structural.FlattenMap =>
         LeftShift(values(0), UnitF, Free.point(RightSide))
 
@@ -289,33 +311,28 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
         LeftShift(values(0), UnitF, Free.point(RightSide))
 
       // id(p, x) - {foo: 12, bar: 18}
-      //   id(a, x:foo) - foo
-      //   id(a, x:bar) - bar
-      //   (one bucket)
+      // id(p, y) - {foo: 1, bar: 2}
+      //   id(p, x:foo) - foo
+      //   id(p, x:bar) - bar
+      //   id(p, y:foo) - foo
+      //   id(p, y:bar) - bar
+      // (one bucket)
       case structural.FlattenMapKeys =>
         LeftShift(values(0), Free.roll(DupMapKeys(UnitF)), Free.point(RightSide))
       case structural.FlattenArrayIndices =>
         LeftShift(values(0), Free.roll(DupArrayIndices(UnitF)), Free.point(RightSide))
 
-      // ShiftMap:
-      // id(a, x) - {foo: 12, bar: 18} ->
-      //   id(a, x, foo) - 12
-      //   id(a, x, bar) - 18
-      // "nest"
-      //   id(a, x:foo) - 12
-      //   id(a, x:bar) - 18
-      //
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
       //   id(p, x, foo) - 12
       //   id(p, x, bar) - 18
       //   id(p, y, foo) - 1
       //   id(p, y, bar) - 2
-      //   (two buckets)
+      // (two buckets)
       case structural.ShiftMap =>
-        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects provenance metadata
+        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
       case structural.ShiftArray =>
-        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects provenance metadata
+        LeftShift(values(0), UnitF, Free.point(RightSide)) // TODO affects bucketing metadata
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -323,7 +340,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
       //   id(p, x, bar) - bar
       //   id(p, y, foo) - foo
       //   id(p, y, bar) - bar
-      //   (two buckets)
+      // (two buckets)
       case structural.ShiftMapKeys =>
         LeftShift(values(0), Free.roll(DupMapKeys(UnitF)), Free.point(RightSide)) // TODO affects bucketing metadata
       case structural.ShiftArrayIndices =>
@@ -334,7 +351,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](implicit showInner: Show[T[QScr
       func: BinaryFunc,
       values: Func.Input[Inner, nat._2]): SourcedPathable[T, Inner] =
     func match {
-      case set.Range => merge2Map(values)(Range(_,_))  // TODO not really a Map - really a LeftShift?
+      case set.Range => merge2Expansion(values)(Range(_, _))
     }
 
   def translateUnaryMapping[A]: UnaryFunc => A => MapFunc[T, A] = {
