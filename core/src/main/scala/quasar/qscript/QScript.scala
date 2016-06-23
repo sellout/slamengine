@@ -528,7 +528,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
   }
 }
 
-class Optimize[T[_[_]]: Recursive: Corecursive](
+class Optimize[T[_[_]]: Recursive](
     implicit eqTEj: Equal[T[EJson]]) extends Helpers[T] {
 
   def elideNopMaps[F[_]: Functor](
