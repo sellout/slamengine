@@ -386,9 +386,6 @@ class Transform[T[_[_]]: Recursive: Corecursive](
   // when we get here, look at the bucketing state - consume the state!
   // List[BucketingState] - List[FreeMap]
   // Nil ~ UnitF
-  //
-  // TODO also we should be able to statically guarantee that we are matching on all reductions here
-  // this involves changing how DimensionalEffect is assigned (algebra rather than parameter)
   def invokeReduction1[A](
     func: UnaryFunc, values: Func.Input[A, nat._1]):
       QScriptCore[T, A] =
@@ -418,18 +415,20 @@ class Transform[T[_[_]]: Recursive: Corecursive](
           Free.roll(StrLit(n.fold(_.value, _.value)))))
     }
 
-  // state: List[FreeMap]
-  def lpToQScript: LogicalPlan[Inner] => QScriptPure[T, Inner] = {
+  type Buckets = List[FreeMap[T]]
+  type QSState = State[Buckets, QScriptPure[T, Inner]]
+
+  def lpToQScript: LogicalPlan[Inner] => QSState = {
     case LogicalPlan.ReadF(path) =>
-      F.inj(Map(CorecursiveOps[T, QScriptPure[T, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed, pathToProj(path)))
+      state(F.inj(Map(CorecursiveOps[T, QScriptPure[T, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed, pathToProj(path))))
 
-    case LogicalPlan.ConstantF(data) => F.inj(Map(
+    case LogicalPlan.ConstantF(data) => state(F.inj(Map(
       E.inj(Const[DeadEnd, Inner](Root)).embed,
-      Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data)))))
+      Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data))))))
 
-    case LogicalPlan.FreeF(name) => F.inj(Map(
+    case LogicalPlan.FreeF(name) => state(F.inj(Map(
       E.inj(Const[DeadEnd, Inner](Empty)).embed,
-      Free.roll(ProjectField(Free.roll(StrLit(name.toString)), UnitF[T]))))
+      Free.roll(ProjectField(Free.roll(StrLit(name.toString)), UnitF[T])))))
 
     //case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
     //  G.inj(PatternGuard(expr, typ, ???, ???))
@@ -437,38 +436,38 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     // TODO this illustrates the untypesafe ugliness b/c the pattern match does not guarantee the appropriate sized `Sized`
     // https://github.com/milessabin/shapeless/pull/187
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Mapping =>
-      F.inj(invokeMapping1(func, Func.Input1(a1)))
+      state(F.inj(invokeMapping1(func, Func.Input1(a1))))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Mapping =>
-      F.inj(invokeMapping2(func, Func.Input2(a1, a2)))
+      state(F.inj(invokeMapping2(func, Func.Input2(a1, a2))))
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) if func.effect == Mapping =>
-      F.inj(invokeMapping3(func, Func.Input3(a1, a2, a3)))
+      state(F.inj(invokeMapping3(func, Func.Input3(a1, a2, a3))))
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Reduction =>
-      G.inj(invokeReduction1(func, Func.Input1(a1)))
+      state(G.inj(invokeReduction1(func, Func.Input1(a1))))
 
     case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-      G.inj(Take(src, jb1, jb2))
+      state(G.inj(Take(src, jb1, jb2)))
 
     case LogicalPlan.InvokeFUnapply(set.Drop, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-      G.inj(Drop(src, jb1, jb2))
+      state(G.inj(Drop(src, jb1, jb2)))
 
     case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
 
-      makeBasicTheta(src, jb1, jb2) match {
+      state(makeBasicTheta(src, jb1, jb2) match {
         case AbsMerge(src, fm1, fm2) =>
           F.inj(Map(G.inj(Filter(H.inj(src).embed, fm2)).embed, fm1))
-      }
+      })
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
-      F.inj(invokeExpansion1(func, Func.Input1(a1)))
+      state(F.inj(invokeExpansion1(func, Func.Input1(a1))))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Expansion =>
-      F.inj(invokeExpansion2(func, Func.Input2(a1, a2)))
+      state(F.inj(invokeExpansion2(func, Func.Input2(a1, a2))))
 
       //// handling bucketing for sorting
       //// e.g. squashing before a reduce puts everything in the same bucket
@@ -478,10 +477,12 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       //// LeftShift and Projection can change grouping/bucketing metadata
       //// y := select sum(pop) (((from zips) group by state) group by substring(city, 0, 2))
       //// z := select sum(pop) from zips group by city
+      //
+      // emits the argument, resets bucketing state, doesn't create a new QS node
       //case LogicalPlan.InvokeF(func @ UnaryFunc(_, _, _, _, _, _, _, _), input) if func.effect == Squashing => ??? // returning the source with added metadata - mutiple buckets
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) =>
-      func match {
+      state(func match {
         case set.GroupBy => a1.project // FIXME: add a2 to state
         case set.Union =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
@@ -492,7 +493,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         case set.Except =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
           H.inj(ThetaJoin(src, jb1, jb2, Free.roll(Nullary(EJson.Bool[T[EJson]](false).embed)), LeftOuter, Free.point(LeftSide)))
-      }
+      })
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) =>
       def invoke(tpe: JoinType): QScriptPure[T, Inner] =
@@ -502,18 +503,18 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       scala.Predef.println(s"right: ${a2.shows}")
       scala.Predef.println(s"cond:  ${a3.transCata(liftFG((new Optimize[T]).elideNopJoins[QScriptPure[T, ?]])).shows}")
 
-      func match {
+      state(func match {
         case set.InnerJoin => invoke(Inner)
         case set.LeftOuterJoin => invoke(LeftOuter)
         case set.RightOuterJoin => invoke(RightOuter)
         case set.FullOuterJoin => invoke(FullOuter)
-      }
+      })
 
     // Map(src=form, MakeObject(name, ()))
     // Map(Map(src=form, MakeObject(namr, ())), body)
     case LogicalPlan.LetF(name, form, body) =>
       val AbsMerge(src, jb1, jb2) = merge(form, body)
-      makeBasicTheta(src, jb1, jb2) match {
+      state(makeBasicTheta(src, jb1, jb2) match {
         case AbsMerge(src, fm1, fm2) =>
           F.inj(Map(
             F.inj(Map(
@@ -522,8 +523,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
                 Free.roll(MakeObject(Free.roll(StrLit("tmp1")), UnitF[T])),
                 Free.roll(MakeObject(Free.roll(StrLit(name.toString)), fm1)))))).embed,
             rebase(fm2, Free.roll(ProjectField(UnitF[T], Free.roll(StrLit("tmp1")))))))
-      }
-
+      })
     //case _ => ??? // TODO
   }
 }

@@ -24,7 +24,7 @@ import quasar.fs._
 import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
 
-import matryoshka._, FunctorT.ops._
+import matryoshka._, TraverseT.ops._
 import org.specs2.scalaz._
 import pathy.Path._
 //import shapeless.contrib.scalaz.instances.deriveEqual
@@ -39,7 +39,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   import optimize._
 
   def callIt(lp: Fix[LP]): Inner =
-    lp.transCata(lpToQScript)
+    lp.transCataM(lpToQScript).eval(Nil)
        .transCata(liftFG(elideNopJoins[QScriptPure[Fix, ?]]))
        .transCata(liftFG(elideNopMaps[QScriptPure[Fix, ?]]))
        .transCata(liftFF(coalesceMap[QScriptPure[Fix, ?]]))
