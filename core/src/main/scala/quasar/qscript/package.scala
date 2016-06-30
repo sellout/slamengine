@@ -17,7 +17,6 @@
 package quasar
 
 import quasar.Predef._
-import quasar.fp._
 
 import scalaz._, Scalaz._
 
@@ -90,15 +89,6 @@ package object qscript {
       src: FreeUnit[T, F],
       replacement: FreeUnit[T, F]): FreeUnit[T, F] =
     src >> replacement
-
-  // TODO this should be found from matryoshka - why isn't it being found!?!?
-  implicit def NTEqual[F[_], A](implicit F: Delay[Equal, F], A: Equal[A]):
-      Equal[F[A]] =
-    F(A)
-
-  implicit def NTShow[F[_], A](implicit F: Delay[Show, F], A: Show[A]):
-      Show[F[A]] =
-    F(A)
 
   implicit def constMergeable[T[_[_]], A](
     implicit ma: Mergeable.Aux[T, A]): Mergeable.Aux[T, Const[A, Unit]] = new Mergeable[Const[A, Unit]] {
