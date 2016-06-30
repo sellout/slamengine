@@ -17,6 +17,8 @@
 package quasar.qscript
 
 import quasar._
+import quasar.ejson
+import quasar.ejson._
 import quasar.Predef._
 import quasar.fp._
 import quasar.std.StdLib._
@@ -252,5 +254,5 @@ object MapFuncs {
   final case class Range[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   def StrLit[T[_[_]], A](str: String)(implicit T: Corecursive[T]) =
-    Nullary[T, A](EJson.Str[T[EJson]](str).embed)
+    Nullary[T, A](CommonEJson.inj(ejson.Str[T[EJson]](str)).embed)
 }

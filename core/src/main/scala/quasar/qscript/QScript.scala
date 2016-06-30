@@ -17,6 +17,8 @@
 package quasar.qscript
 
 import quasar._
+import quasar.ejson
+import quasar.ejson.{Int => _, _}
 import quasar.fp._
 import quasar.qscript.MapFuncs._
 import quasar.Predef._
@@ -36,41 +38,6 @@ import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
 // - the common source in a Join or Union will be the longest common branch
 // - all Reads have a Root (or another Read?) as their source
 // - in `Pathable`, the only `MapFunc` node allowed is a `ProjectField`
-
-// TODO use real EJson when it lands in master
-sealed trait EJson[A]
-object EJson {
-  def toEJson[T[_[_]]: Corecursive](data: Data): T[EJson] = data match {
-    case Data.Str(str) => Str[T[EJson]](str).embed
-    case Data.Null => Null[T[EJson]]().embed
-    case Data.Bool(bool) => Bool[T[EJson]](bool).embed
-    case _ => Null[T[EJson]]().embed
-  }
-
-  final case class Null[A]() extends EJson[A]
-  final case class Bool[A](b: Boolean) extends EJson[A]
-  final case class Str[A](str: String) extends EJson[A]
-
-  implicit def equal: Delay[Equal, EJson] = new Delay[Equal, EJson] {
-    def apply[A](in: Equal[A]): Equal[EJson[A]] = Equal.equal((a, b) => true)
-  }
-
-  implicit def functor: Functor[EJson] = new Functor[EJson] {
-    def map[A, B](fa: EJson[A])(f: A => B): EJson[B] = fa match {
-      case Null() => Null[B]()
-      case Bool(b) => Bool[B](b)
-      case Str(str) => Str[B](str)
-    }
-  }
-
-  implicit def show: Delay[Show, EJson] = new Delay[Show, EJson] {
-    def apply[A](sh: Show[A]): Show[EJson[A]] = Show.show {
-      case Null() => Cord("Null()")
-      case Bool(b) => Cord(s"Bool($b)")
-      case Str(str) => Cord(s"Str($str)")
-    }
-  }
-}
 
 sealed trait SortDir
 final case object Ascending  extends SortDir
@@ -445,9 +412,9 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         (H.inj(res.src).embed, rebase(rebase(struct, bucket), res.left), res.right)
       // TODO in the cases below do we need to merge src?
       case -\/(SquashBucket(src)) =>
-        (values(0), Free.roll(Nullary(EJson.Null[T[EJson]]().embed)), UnitF) // singleton provenance - one big bucket
+        (values(0), Free.roll(Nullary(CommonEJson.inj(ejson.Null[T[EJson]]()).embed)), UnitF) // singleton provenance - one big bucket
       case \/-((qs, 0)) =>
-        (values(0), Free.roll(Nullary(EJson.Null[T[EJson]]().embed)), UnitF) // singleton provenance - one big bucket
+        (values(0), Free.roll(Nullary(CommonEJson.inj(ejson.Null[T[EJson]]()).embed)), UnitF) // singleton provenance - one big bucket
       case \/-((qs, _)) =>
         (values(0), UnitF, UnitF) // everying in an individual bucket - throw away reduce
     }
@@ -479,13 +446,25 @@ class Transform[T[_[_]]: Recursive: Corecursive](
           Free.roll(StrLit(n.fold(_.value, _.value)))))
     }
 
+  // TODO error handling
+  def fromData[T[_[_]]: Corecursive](data: Data): String \/ T[EJson] = {
+    data.hyloM[String \/ ?, CoEnv[Data, EJson, ?], T[EJson]](
+      interpretM[String \/ ?, EJson, Data, T[EJson]]({
+        case data => data.toString.left[T[EJson]]
+      },
+        _.embed.right[String]),
+      Data.toEJson[EJson].apply(_).right)
+  }
+
   def lpToQScript: LogicalPlan[Inner] => QScriptInternal[T, Inner] = {
     case LogicalPlan.ReadF(path) =>
       F.inj(Map(CorecursiveOps[T, QScriptInternal[T, ?]](E.inj(Const[DeadEnd, Inner](Root))).embed, pathToProj(path)))
 
     case LogicalPlan.ConstantF(data) => F.inj(Map(
       E.inj(Const[DeadEnd, Inner](Root)).embed,
-      Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](EJson.toEJson[T](data)))))
+      Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](fromData(data).fold(
+        error => CommonEJson.inj(ejson.Str[T[EJson]](error)).embed,
+        x => x)))))
 
     case LogicalPlan.FreeF(name) => F.inj(Map(
       E.inj(Const[DeadEnd, Inner](Empty)).embed,
@@ -613,7 +592,13 @@ class Transform[T[_[_]]: Recursive: Corecursive](
           H.inj(ThetaJoin(src, jb1, jb2, basicJF, Inner, Free.point(LeftSide)))
         case set.Except =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-          H.inj(ThetaJoin(src, jb1, jb2, Free.roll(Nullary(EJson.Bool[T[EJson]](false).embed)), LeftOuter, Free.point(LeftSide)))
+          H.inj(ThetaJoin(
+            src,
+            jb1,
+            jb2,
+            Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
+            LeftOuter,
+            Free.point(LeftSide)))
       }
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) =>

@@ -17,6 +17,7 @@
 package quasar.qscript
 
 import quasar.Predef._
+import quasar.ejson.{Int => _, _}
 import quasar.fp._
 import quasar.Type
 

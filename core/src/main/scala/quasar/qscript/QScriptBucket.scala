@@ -16,13 +16,13 @@
 
 package quasar.qscript
 
+import quasar.ejson.{Int => _, _}
 import quasar.Predef._
 import quasar.fp._
 
 import matryoshka._, Recursive.ops._
 import scalaz._, Scalaz._
 
-// TODO add SquashBucket - this means that there is only one bucket
 sealed trait QScriptBucket[T[_[_]], A] {
   def src: A
 }

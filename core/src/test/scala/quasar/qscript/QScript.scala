@@ -30,8 +30,7 @@ import matryoshka._, TraverseT.ops._
 import org.specs2.scalaz._
 import pathy.Path._
 //import shapeless.contrib.scalaz.instances.deriveEqual
-import scalaz._
-import Scalaz._
+import scalaz._, Scalaz._
 
 class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val transform = new Transform[Fix]
