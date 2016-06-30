@@ -29,7 +29,6 @@ import scala.Predef.implicitly
 import matryoshka._, TraverseT.ops._
 import org.specs2.scalaz._
 import pathy.Path._
-//import shapeless.contrib.scalaz.instances.deriveEqual
 import scalaz._, Scalaz._
 
 class QScriptSpec extends CompilerHelpers with ScalazMatchers {
@@ -39,19 +38,19 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val optimize = new Optimize[Fix]
   import optimize._
 
-  val xyz = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
+  val elide = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
 
   def callIt(lp: Fix[LP]): InnerPure =
     lp.transCata(lpToQScript)
-       .transCata(xyz.purify)
+       .transCata(elide.purify)
        .transCata(liftFG(elideNopJoins[QScriptPure[Fix, ?]]))
        .transCata(liftFG(elideNopMaps[QScriptPure[Fix, ?]]))
        .transCata(liftFF(coalesceMap[QScriptPure[Fix, ?]]))
 
-  val Z = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]
-  val Y = implicitly[SourcedPathable[Fix, ?] :<: QScriptPure[Fix, ?]]
+  val DeadEndPure = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]
+  val SourcedPathablePure = implicitly[SourcedPathable[Fix, ?] :<: QScriptPure[Fix, ?]]
 
-  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](Z.inj(Const[DeadEnd, InnerPure](Root))).embed
+  def RootR = CorecursiveOps[Fix, QScriptPure[Fix, ?]](DeadEndPure.inj(Const[DeadEnd, InnerPure](Root))).embed
 
   def ProjectFieldR[A](src: FreeMap[Fix], field: FreeMap[Fix]): FreeMap[Fix] =
     Free.roll(ProjectField(src, field))
@@ -65,13 +64,13 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
     "convert a very simple read" in {
       callIt(lpRead("/foo")) must
       equal(
-        Y.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
+        SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
 
     "convert a simple read" in {
       callIt(lpRead("/some/foo/bar")) must
       equal(
-        Y.inj(
+        SourcedPathablePure.inj(
           Map(RootR,
             ProjectFieldR(
               ProjectFieldR(
@@ -87,7 +86,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
     "convert a basic invoke" in {
       callIt(math.Add(lpRead("/foo"), lpRead("/bar")).embed) must
       equal(
-        Y.inj(
+        SourcedPathablePure.inj(
           Map(RootR,
             Free.roll(Add(
               ProjectFieldR(UnitF, StrR("foo")),
@@ -113,7 +112,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
                 structural.ObjectProject[FLP](
                   structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("right"))),
                   LP.Constant(Data.Str("address")))))))
-      callIt(lp) must equal(Y.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
+      callIt(lp) must equal(SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrR("foo")))).embed)
     }
   }
 }
