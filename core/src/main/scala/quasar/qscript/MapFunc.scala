@@ -23,8 +23,8 @@ import quasar.Predef._
 import quasar.fp._
 import quasar.std.StdLib._
 
-import matryoshka._
-import scalaz._
+import matryoshka._, Recursive.ops._
+import scalaz._, Scalaz._
 
 sealed trait MapFunc[T[_[_]], A]
 
@@ -45,6 +45,38 @@ sealed trait Ternary[T[_[_]], A] extends MapFunc[T, A] {
 
 object MapFunc {
   import MapFuncs._
+
+ // TODO subtyping is preventing embeding of MapFuncs
+ object ConcatArraysN {
+   def apply[T[_[_]]: Recursive: Corecursive](args: T[MapFunc[T, ?]]*) =
+     args.toList match {
+       case h :: t => t.foldLeft(h)((a, b) => (ConcatArrays(a, b): MapFunc[T, T[MapFunc[T, ?]]]).embed).project
+       case Nil    => Nullary(CommonEJson.inj(ejson.Arr[T[EJson]](Nil)).embed)
+     }
+   def unapplySeq[T[_[_]]: Recursive](mf: MapFunc[T, T[MapFunc[T, ?]]]): Option[List[T[MapFunc[T, ?]]]] =
+     mf match {
+       case ConcatArrays(h, t) =>
+         (unapplySeq(h.project).getOrElse(List(h)) ++
+           unapplySeq(t.project).getOrElse(List(t))).some
+       case _ => None
+     }
+ }
+
+ // TODO subtyping is preventing embeding of MapFuncs
+ object ConcatObjectsN {
+   def apply[T[_[_]]: Recursive: Corecursive](args: T[MapFunc[T, ?]]*) =
+     args.toList match {
+       case h :: t => t.foldLeft(h)((a, b) => (ConcatObjects(a, b): MapFunc[T, T[MapFunc[T, ?]]]).embed).project
+       case Nil    => Nullary(ExtEJson.inj(ejson.Map[T[EJson]](Nil)).embed)
+     }
+   def unapplySeq[T[_[_]]: Recursive](mf: MapFunc[T, T[MapFunc[T, ?]]]): Option[List[T[MapFunc[T, ?]]]] =
+     mf match {
+       case ConcatObjects(h, t) =>
+         (unapplySeq(h.project).getOrElse(List(h)) ++
+           unapplySeq(t.project).getOrElse(List(t))).some
+       case _ => None
+     }
+ }
 
   // TODO: The `T` passed to MapFunc and the `T` wrapping MapFunc should be distinct
   // def normalize[T[_[_]]: Recursive](implicit EJ: Equal[T[EJson]]):
