@@ -256,6 +256,6 @@ object MapFuncs {
   final case class Guard[T[_[_]], A](a1: A, pattern: Type, a2: A, a3: A)
       extends Ternary[T, A]
 
-  def StrLit[T[_[_]], A](str: String)(implicit T: Corecursive[T]) =
+  def StrLit[T[_[_]], A](str: String)(implicit T: Corecursive[T]): MapFunc[T, A] =
     Nullary[T, A](CommonEJson.inj(ejson.Str[T[EJson]](str)).embed)
 }

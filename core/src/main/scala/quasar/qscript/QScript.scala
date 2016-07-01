@@ -420,15 +420,24 @@ class Transform[T[_[_]]: Recursive: Corecursive](
   }
 
   def invokeThetaJoin(input: Func.Input[Inner, nat._3], tpe: JoinType): ThetaJoin[T, Inner] = {
-    val AbsMerge(src1, jb1l, jb1r) = merge(input(0), input(1))
-    val AbsMerge(src2, jb2l, jb2r) = merge(src1, input(2))
+    // TODO write a function for a 3-way merge - this pattern is common
+    val AbsMerge(src1, jbLeft, jbRight) = merge(input(0), input(1))
+    val AbsMerge(src2, bothSides, cond) = merge(src1, input(2))
 
-    val leftBr = rebase(jb2l, jb1l)
-    val rightBr = rebase(jb2l, jb1r)
+    val leftBr = rebase(bothSides, jbLeft)
+    val rightBr = rebase(bothSides, jbRight)
 
-    val on: JoinFunc[T] = basicJF // TODO use jb2r
+    val on: JoinFunc[T] = basicJF // TODO use cond
 
-    ThetaJoin(src2, leftBr, rightBr, on, Inner, Free.point(LeftSide))
+    ThetaJoin(
+      src2,
+      leftBr,
+      rightBr,
+      on,
+      Inner,
+      Free.roll(ConcatObjects(
+        Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("left")), Free.point(LeftSide))),
+        Free.roll(MakeObject(Free.roll(StrLit[T, JoinFunc[T]]("right")), Free.point(RightSide))))))
   }
 
   def pathToProj(path: pathy.Path[_, _, _]): FreeMap[T] =
