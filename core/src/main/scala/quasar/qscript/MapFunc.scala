@@ -26,6 +26,7 @@ import quasar.std.StdLib._
 import matryoshka._, Recursive.ops._
 import scalaz._, Scalaz._
 
+// TODO all `Free` should be generalized to `T` once we can handle recursive `Free`
 sealed trait MapFunc[T[_[_]], A]
 
 final case class Nullary[T[_[_]], A](ejson: T[EJson]) extends MapFunc[T, A]
@@ -48,28 +49,32 @@ object MapFunc {
 
  // TODO subtyping is preventing embeding of MapFuncs
  object ConcatArraysN {
-   def apply[T[_[_]]: Recursive: Corecursive](args: T[MapFunc[T, ?]]*) =
+   def apply[T2[_[_]]: Corecursive, A](args: Free[MapFunc[T2, ?], A]*): Free[MapFunc[T2, ?], A] =
      args.toList match {
-       case h :: t => t.foldLeft(h)((a, b) => (ConcatArrays(a, b): MapFunc[T, T[MapFunc[T, ?]]]).embed).project
-       case Nil    => Nullary(CommonEJson.inj(ejson.Arr[T[EJson]](Nil)).embed)
+       case h :: t => t.foldLeft(h)((a, b) => Free.roll(ConcatArrays(a, b): MapFunc[T2, Free[MapFunc[T2, ?], A]]))
+       case Nil    => Free.roll(Nullary[T2, Free[MapFunc[T2, ?], A]](CommonEJson.inj(ejson.Arr[T2[EJson]](Nil)).embed))
      }
-   def unapplySeq[T[_[_]]: Recursive](mf: MapFunc[T, T[MapFunc[T, ?]]]): Option[List[T[MapFunc[T, ?]]]] =
-     mf match {
+   def unapply[T2[_[_]], A](
+     mf: Free[MapFunc[T2, ?], A]):
+       Option[List[Free[MapFunc[T2, ?], A]]] =
+     mf.resume.fold({
        case ConcatArrays(h, t) =>
-         (unapplySeq(h.project).getOrElse(List(h)) ++
-           unapplySeq(t.project).getOrElse(List(t))).some
+         (unapply(h).getOrElse(List(h)) ++
+           unapply(t).getOrElse(List(t))).some
        case _ => None
-     }
+     }, _ => None)
  }
 
  // TODO subtyping is preventing embeding of MapFuncs
  object ConcatObjectsN {
-   def apply[T[_[_]]: Recursive: Corecursive](args: T[MapFunc[T, ?]]*) =
+   def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive](args: T[MapFunc[T2, ?]]*) =
      args.toList match {
-       case h :: t => t.foldLeft(h)((a, b) => (ConcatObjects(a, b): MapFunc[T, T[MapFunc[T, ?]]]).embed).project
-       case Nil    => Nullary(ExtEJson.inj(ejson.Map[T[EJson]](Nil)).embed)
+       case h :: t => t.foldLeft(h)((a, b) => (ConcatObjects(a, b): MapFunc[T2, T[MapFunc[T2, ?]]]).embed).project
+       case Nil    => Nullary(ExtEJson.inj(ejson.Map[T2[EJson]](Nil)).embed)
      }
-   def unapplySeq[T[_[_]]: Recursive](mf: MapFunc[T, T[MapFunc[T, ?]]]): Option[List[T[MapFunc[T, ?]]]] =
+   def unapplySeq[T[_[_]]: Recursive, T2[_[_]]](
+     mf: MapFunc[T2, T[MapFunc[T2, ?]]]):
+       Option[List[T[MapFunc[T2, ?]]]] =
      mf match {
        case ConcatObjects(h, t) =>
          (unapplySeq(h.project).getOrElse(List(h)) ++
@@ -288,6 +293,16 @@ object MapFuncs {
   final case class Guard[T[_[_]], A](a1: A, pattern: Type, a2: A, a3: A)
       extends Ternary[T, A]
 
-  def StrLit[T[_[_]], A](str: String)(implicit T: Corecursive[T]): MapFunc[T, A] =
-    Nullary[T, A](CommonEJson.inj(ejson.Str[T[EJson]](str)).embed)
+  object StrLit {
+    def apply[T[_[_]]: Corecursive, A](str: String): Free[MapFunc[T, ?], A] =
+      Free.roll(Nullary[T, Free[MapFunc[T, ?], A]](CommonEJson.inj(ejson.Str[T[EJson]](str)).embed))
+    
+    def unapply[T[_[_]]: Recursive, A](mf: Free[MapFunc[T, ?], A]): Option[String] = mf.resume.fold ({
+      case Nullary(ej) => CommonEJson.prj(ej.project).flatMap {
+        case ejson.Str(str) => str.some
+        case _ => None
+      }
+      case _ => None
+    }, _ => None)
+  }
 }
