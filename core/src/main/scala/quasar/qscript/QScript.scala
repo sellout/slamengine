@@ -426,6 +426,17 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       Free.point(Fin[nat._0, nat._1]))
   }
 
+  // TODO: These should definitely be in Matryoshka.
+
+  // apomorphism - short circuit by returning left
+  def substitute[T[_[_]], F[_]](original: T[F], replacement: T[F])(implicit T: Equal[T[F]]):
+      T[F] => T[F] \/ T[F] =
+   tf => if (tf ≟ original) replacement.left else original.right
+
+  def transApoT[T[_[_]]: FunctorT, F[_]: Functor](t: T[F])(f: T[F] => T[F] \/ T[F]):
+      T[F] =
+    f(t).fold(ι, FunctorT[T].map(_)(_.map(transApoT(_)(f))))
+
   def invokeThetaJoin(input: Func.Input[Inner, nat._3], tpe: JoinType): ThetaJoin[T, Inner] = {
     // TODO write a function for a 3-way merge - this pattern is common
     val AbsMerge(src1, jbLeft, jbRight) = merge(input(0), input(1))
@@ -434,7 +445,12 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     val leftBr = rebase(bothSides, jbLeft)
     val rightBr = rebase(bothSides, jbRight)
 
-    val on: JoinFunc[T] = basicJF // TODO use cond
+    val onQS =
+      transApoT[Free[?[_], JoinSide], QScriptInternal[T, ?]](transApoT[Free[?[_], JoinSide], QScriptInternal[T, ?]](cond.map[JoinSide](κ(RightSide)))(
+        substitute[Free[?[_], JoinSide], QScriptInternal[T, ?]](jbLeft.map[JoinSide](κ(RightSide)), Free.point(LeftSide))))(
+        substitute[Free[?[_], JoinSide], QScriptInternal[T, ?]](jbRight.map[JoinSide](κ(RightSide)), Free.point(RightSide)))
+
+    val on: JoinFunc[T] = basicJF // get from onQS to here somehow
 
     ThetaJoin(
       src2,
