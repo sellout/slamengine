@@ -41,18 +41,6 @@ import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
 // - all Reads have a Root (or another Read?) as their source
 // - in `Pathable`, the only `MapFunc` node allowed is a `ProjectField`
 
-sealed abstract class SortDir
-
-// TODO: LogicalPlan should borrow _this_ SortDir, since this one needs to be
-//       visible to backends, so it has to exist here anyway.
-object SortDir {
-  final case object Ascending  extends SortDir
-  final case object Descending extends SortDir
-
-  implicit val equal: Equal[SortDir] = Equal.equalRef
-  implicit val show: Show[SortDir] = Show.showFromToString
-}
-
 sealed abstract class JoinType
 final case object Inner extends JoinType
 final case object FullOuter extends JoinType
