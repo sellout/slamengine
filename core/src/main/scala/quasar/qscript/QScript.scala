@@ -228,23 +228,37 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       Free.point(RightSide)) // TODO Does this add a bucket for the range values? (values mirrored in buckets)
   }
 
+  case class Merge3(
+    src: ThetaJoin[T, Inner],
+    first: FreeMap[T],
+    second: FreeMap[T],
+    fands: FreeMap[T],
+    third: FreeMap[T])
+
+  def merge3(a1: Inner, a2: Inner, a3: Inner): Merge3 = {
+    val AbsMerge(merged0, first0, second0) = merge(a1, a2)
+    val AbsMerge(merged, fands0, third0) = merge(merged0, a3)
+
+    val AbsMerge(src0, first, second) =
+      makeBasicTheta(merged0, first0, second0)
+    val AbsMerge(src, fands, third) =
+      makeBasicTheta(ThetaJoinInternal.inj(src0).embed, fands0, third0)
+
+    Merge3(src, first, second, fands, third)
+  }
+
   def merge3Map(
     values: Func.Input[Inner, nat._3])(
     func: (FreeMap[T], FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]])(
     implicit ma: Mergeable.Aux[T, QScriptInternal[T, Unit]]):
       SourcedPathable[T, Inner] = {
 
-    // TODO refactor this out
-    val AbsMerge(merged, first, second) = merge(values(0), values(1))
-    val AbsMerge(merged2, fands, third) = merge(merged, values(2))
+    val merged: Merge3 = merge3(values(0), values(1), values(2))
 
-    val res = makeBasicTheta(merged2, first, second)
-    val res2 = makeBasicTheta(ThetaJoinInternal.inj(res.src).embed, fands, third)
-
-    Map(ThetaJoinInternal.inj(res2.src).embed, Free.roll(func(
-      rebase(res2.left, res.left),
-      rebase(res2.left, res.right),
-      res2.right)))
+    Map(ThetaJoinInternal.inj(merged.src).embed, Free.roll(func(
+      rebase(merged.fands, merged.first),
+      rebase(merged.fands, merged.second),
+      merged.third)))
   }
 
   // TODO namegen
@@ -428,7 +442,6 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     f(t).fold(ι, FunctorT[T].map(_)(_.map(transApoT(_)(f))))
 
   def invokeThetaJoin(input: Func.Input[Inner, nat._3], tpe: JoinType): ThetaJoin[T, Inner] = {
-    // TODO write a function for a 3-way merge - this pattern is common
     val AbsMerge(src1, jbLeft, jbRight) = merge(input(0), input(1))
     val AbsMerge(src2, bothSides, cond) = merge(src1, input(2))
 
@@ -440,7 +453,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         substitute[Free[?[_], JoinSide], QScriptInternal[T, ?]](jbLeft.map[JoinSide](κ(RightSide)), Free.point(LeftSide))))(
         substitute[Free[?[_], JoinSide], QScriptInternal[T, ?]](jbRight.map[JoinSide](κ(RightSide)), Free.point(RightSide)))
 
-    val on: JoinFunc[T] = basicJF // get from onQS to here somehow
+    val on: JoinFunc[T] = basicJF // TODO get from onQS to here somehow
 
     ThetaJoin(
       src2,
@@ -545,11 +558,8 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     case LogicalPlan.InvokeFUnapply(set.OrderBy, Sized(a1, a2, a3)) => {
       val (bucketSrc, bucket, thing) = findBucket(a1)
 
-      val AbsMerge(arraySrc0, keys0, order0) = merge(a2, a3)
-      val AbsMerge(commonSrc0, buckets0, arrays0) = merge(bucketSrc, arraySrc0)
-
-      val AbsMerge(arraySrc, keys, order) = makeBasicTheta(commonSrc0, keys0, order0)
-      val AbsMerge(commonSrc, buckets, arrays) = makeBasicTheta(ThetaJoinInternal.inj(arraySrc).embed, buckets0, arrays0)
+      val Merge3(src, keys, order, buckets, arrays): Merge3 =
+        merge3(a2, a3, bucketSrc)
 
       val rebasedArrays = rebase(thing, arrays)
 
@@ -578,7 +588,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         orderList.map { keysList.zip(_) }
       
       QScriptCoreInternal.inj(Sort(
-        ThetaJoinInternal.inj(commonSrc).embed,
+        ThetaJoinInternal.inj(src).embed,
         rebase(bucket, buckets),
         lists.fold(_ => Nil, scala.Predef.identity))) // TODO errors must escape
     }

@@ -64,6 +64,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
     "convert a very simple read" in {
       callIt(lpRead("/foo")) must
       equal(
+        // Map(Root, ProjectField(Unit, "foo"))
         SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed)
     }
 
