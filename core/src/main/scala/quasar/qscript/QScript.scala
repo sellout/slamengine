@@ -614,6 +614,9 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Expansion =>
       SourcedPathableInternal.inj(invokeExpansion2(func, Func.Input2(a1, a2)))
 
+    case LogicalPlan.InvokeFUnapply(set.Constantly, Sized(a1, a2)) =>
+      ??? // SourcedPathableInternal.inj(Map(a2, a1))
+
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Transformation =>
       func match {
         case set.GroupBy =>

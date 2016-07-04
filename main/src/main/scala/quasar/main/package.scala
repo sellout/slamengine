@@ -24,7 +24,7 @@ import quasar.fp.free._
 import quasar.fs._
 import quasar.fs.mount._
 import quasar.fs.mount.hierarchical._
-import quasar.physical.mongodb._
+import quasar.physical.mongodb._ // FIXME: shouldn’t need this
 
 import com.mongodb.MongoException
 import monocle.Lens
@@ -62,7 +62,8 @@ package object main {
     * to a fixed set of effects that filesystems must interpret into.
     */
   val physicalFileSystems: FileSystemDef[PhysFsEffM] =
-    quasar.physical.mongodb.fs.mongoDbFileSystemDef[PhysFsEff]
+    quasar.physical.mongodb.fs.mongoDbFileSystemDef[PhysFsEff] |+|
+    quasar.physical.mongodbq.fs.mongoDbFileSystemDef[PhysFsEff]
 
   /** The intermediate effect FileSystem operations are interpreted into.
     */

@@ -174,7 +174,7 @@ lazy val oneJarSettings =
 lazy val root = project.in(file("."))
   .settings(commonSettings: _*)
   .settings(noPublishSettings)
-  .aggregate(foundation, ejson, core, mongodb, main, repl, web, it)
+  .aggregate(foundation, ejson, core, mongodb, mongodbq, main, repl, web, it)
   .enablePlugins(AutomateHeaderPlugin)
 
 lazy val foundation = project
@@ -206,7 +206,9 @@ lazy val core = project
 
 lazy val main = project
   .settings(name := "quasar-main-internal")
-  .dependsOn(mongodb % "test->test;compile->compile")
+  .dependsOn(
+    mongodb % "test->test;compile->compile",
+    mongodbq % "test->test;compile->compile")
   .settings(oneJarSettings: _*)
   .settings(publishSettings: _*)
   .enablePlugins(AutomateHeaderPlugin)
@@ -215,6 +217,13 @@ lazy val main = project
 
 lazy val mongodb = project
   .settings(name := "quasar-mongodb-internal")
+  .dependsOn(core % "test->test;compile->compile")
+  .settings(oneJarSettings: _*)
+  .settings(publishSettings: _*)
+  .enablePlugins(AutomateHeaderPlugin)
+
+lazy val mongodbq = project
+  .settings(name := "quasar-mongodbq-internal")
   .dependsOn(core % "test->test;compile->compile")
   .settings(oneJarSettings: _*)
   .settings(publishSettings: _*)

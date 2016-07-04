@@ -20,8 +20,9 @@ import quasar.Predef._
 import quasar._, RenderTree.ops._
 import quasar.effect.LiftedOps
 import quasar.fp._
+import quasar.qscript._
 
-import matryoshka._
+import matryoshka._, FunctorT.ops._
 import pathy.Path._
 import scalaz._, Scalaz._
 import scalaz.iteratee._
@@ -39,6 +40,24 @@ object QueryFile {
     implicit val resultHandleOrder: Order[ResultHandle] =
       Order.orderBy(_.run)
   }
+
+  val qscript = new Transform[Fix]
+  val optimize = new Optimize[Fix]
+
+  val elide = scala.Predef.implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
+
+  /** This is a stop-gap function that QScript-based backends should use until
+    * LogicalPlan no longer needs to be exposed to any backend.
+    */
+  val convertToQScript: Fix[LogicalPlan] => Fix[QScriptPure[Fix, ?]] =
+    _.transCata(qscript.lpToQScript)
+      .transCata(elide.purify)
+      // .transCata(liftFG(optimize.normalizeMapFunc))
+      .transCata(
+        liftFG(optimize.elideNopJoin[QScriptPure[Fix, ?]]) ⋙
+        liftFG(optimize.elideNopMap[QScriptPure[Fix, ?]]) ⋙
+        liftFF(optimize.coalesceMaps[QScriptPure[Fix, ?]]))
+
 
   /** The result of the query is stored in an output file
     * instead of being returned to the user immidiately.

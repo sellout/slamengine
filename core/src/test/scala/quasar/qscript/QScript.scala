@@ -20,13 +20,13 @@ import quasar.Predef._
 import quasar.{LogicalPlan, Data, CompilerHelpers}
 import quasar.{LogicalPlan => LP}
 import quasar.fp._
-import quasar.fs._
+import quasar.fs._, QueryFile.convertToQScript
 import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
 
 import scala.Predef.implicitly
 
-import matryoshka._, TraverseT.ops._
+import matryoshka._
 import org.specs2.scalaz._
 import pathy.Path._
 import scalaz._, Scalaz._
@@ -34,20 +34,6 @@ import scalaz._, Scalaz._
 class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val transform = new Transform[Fix]
   import transform._
-
-  val optimize = new Optimize[Fix]
-  import optimize._
-
-  val elide = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
-
-  def callIt(lp: Fix[LP]): InnerPure =
-    lp.transCata(lpToQScript)
-      .transCata(elide.purify)
-       // .transCata(liftFG(normalizeMapFunc))
-      .transCata(
-        liftFG(elideNopJoin[QScriptPure[Fix, ?]]) ⋙
-        liftFG(elideNopMap[QScriptPure[Fix, ?]]) ⋙
-        liftFF(coalesceMaps[QScriptPure[Fix, ?]]))
 
   val DeadEndPure = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]
   val SourcedPathablePure = implicitly[SourcedPathable[Fix, ?] :<: QScriptPure[Fix, ?]]
@@ -62,14 +48,14 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
 
   "replan" should {
     "convert a very simple read" in {
-      callIt(lpRead("/foo")) must
+      convertToQScript(lpRead("/foo")) must
       equal(
         // Map(Root, ProjectField(Unit, "foo"))
         SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed)
     }
 
     "convert a simple read" in {
-      callIt(lpRead("/some/foo/bar")) must
+      convertToQScript(lpRead("/some/foo/bar")) must
       equal(
         SourcedPathablePure.inj(
           Map(RootR,
@@ -85,7 +71,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
     }
 
     "convert a basic invoke" in {
-      callIt(math.Add(lpRead("/foo"), lpRead("/bar")).embed) must
+      convertToQScript(math.Add(lpRead("/foo"), lpRead("/bar")).embed) must
       equal(
         SourcedPathablePure.inj(
           Map(RootR,
@@ -113,7 +99,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
                 structural.ObjectProject[FLP](
                   structural.ObjectProject(LP.Free('__tmp2), LP.Constant(Data.Str("right"))),
                   LP.Constant(Data.Str("address")))))))
-      callIt(lp) must equal(SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed)
+      convertToQScript(lp) must equal(SourcedPathablePure.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed)
     }
   }
 }
