@@ -74,7 +74,7 @@ object DeadEnd {
         p1: DeadEnd,
         p2: DeadEnd):
           Option[Merge[IT, DeadEnd]] =
-        if (p1 === p2)
+        if (p1 ≟ p2)
           Some(AbsMerge[IT, DeadEnd, FreeMap](p1, UnitF, UnitF))
         else
           None

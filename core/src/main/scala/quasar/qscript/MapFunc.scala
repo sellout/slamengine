@@ -105,30 +105,142 @@ object MapFunc {
   //     }).embed, f)))
   // }
 
+  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
     def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
       fa match {
+        // nullary
         case Nullary(v) => Nullary[T, B](v)
+
+        // unary
+        case Date(a1) => Date(f(a1))
+        case Time(a1) => Time(f(a1))
+        case Timestamp(a1) => Timestamp(f(a1))
+        case Interval(a1) => Interval(f(a1))
+        case TimeOfDay(a1) => TimeOfDay(f(a1))
+        case ToTimestamp(a1) => ToTimestamp(f(a1))
         case Negate(a1) => Negate(f(a1))
+        case Not(a1) => Not(f(a1))
+        case Length(a1) => Length(f(a1))
+        case Lower(a1) => Lower(f(a1))
+        case Upper(a1) => Upper(f(a1))
+        case Bool(a1) => Bool(f(a1))
+        case Integer(a1) => Integer(f(a1))
+        case Decimal(a1) => Decimal(f(a1))
+        case Null(a1) => Null(f(a1))
+        case ToString(a1) => ToString(f(a1))
+        case MakeArray(a1) => MakeArray(f(a1))
+        case DupArrayIndices(a1) => DupArrayIndices(f(a1))
+        case DupMapKeys(a1) => DupMapKeys(f(a1))
+
+        // binary
+        case Extract(a1, a2) => Extract(f(a1), f(a2))
+        case Add(a1, a2) => Add(f(a1), f(a2))
+        case Multiply(a1, a2) => Multiply(f(a1), f(a2))
+        case Subtract(a1, a2) => Subtract(f(a1), f(a2))
+        case Divide(a1, a2) => Divide(f(a1), f(a2))
+        case Modulo(a1, a2) => Modulo(f(a1), f(a2))
+        case Power(a1, a2) => Power(f(a1), f(a2))
+        case Eq(a1, a2) => Eq(f(a1), f(a2))
+        case Neq(a1, a2) => Neq(f(a1), f(a2))
+        case Lt(a1, a2) => Lt(f(a1), f(a2))
+        case Lte(a1, a2) => Lte(f(a1), f(a2))
+        case Gt(a1, a2) => Gt(f(a1), f(a2))
+        case Gte(a1, a2) => Gte(f(a1), f(a2))
+        case IfUndefined(a1, a2) => IfUndefined(f(a1), f(a2))
+        case And(a1, a2) => And(f(a1), f(a2))
+        case Or(a1, a2) => Or(f(a1), f(a2))
+        case Coalesce(a1, a2) => Coalesce(f(a1), f(a2))
+        case In(a1, a2) => In(f(a1), f(a2))
+        case Within(a1, a2) => Within(f(a1), f(a2))
+        case Constantly(a1, a2) => Constantly(f(a1), f(a2))
         case MakeObject(a1, a2) => MakeObject(f(a1), f(a2))
         case ConcatObjects(a1, a2) => ConcatObjects(f(a1), f(a2))
+        case ProjectIndex(a1, a2) => ProjectIndex(f(a1), f(a2))
         case ProjectField(a1, a2) => ProjectField(f(a1), f(a2))
-        case Eq(a1, a2) => Eq(f(a1), f(a2))
-        case x => { scala.Predef.print(s">>>>>>>>>>> got a functor $x"); ??? }
+        case DeleteField(a1, a2) => DeleteField(f(a1), f(a2))
+        case ConcatArrays(a1, a2) => ConcatArrays(f(a1), f(a2))
+        case Range(a1, a2) => Range(f(a1), f(a2))
+
+        //  ternary
+        case Between(a1, a2, a3) => Between(f(a1), f(a2), f(a3))
+        case Cond(a1, a2, a3) => Cond(f(a1), f(a2), f(a3))
+        case Like(a1, a2, a3) => Like(f(a1), f(a2), f(a3))
+        case Search(a1, a2, a3) => Search(f(a1), f(a2), f(a3))
+        case Substring(a1, a2, a3) => Substring(f(a1), f(a2), f(a3))
+        case Guard(a1, tpe, a2, a3) => Guard(f(a1), tpe, f(a2), f(a3))
       }
   }
 
+  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]):
       Delay[Equal, MapFunc[T, ?]] =
     new Delay[Equal, MapFunc[T, ?]] {
-      // TODO this is wrong - we need to define equality on a function by function basis
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
-        case (Negate(a1), Negate(a2)) => in.equal(a1, a1)
+
+        // unary
+        case (Date(a1), Date(b1)) => in.equal(a1, b1) 
+        case (Time(a1), Time(b1)) => in.equal(a1, b1)
+        case (Timestamp(a1), Timestamp(b1)) => in.equal(a1, b1)
+        case (Interval(a1), Interval(b1)) => in.equal(a1, b1)
+        case (TimeOfDay(a1), TimeOfDay(b1)) => in.equal(a1, b1)
+        case (ToTimestamp(a1), ToTimestamp(b1)) => in.equal(a1, b1)
+        case (Negate(a1), Negate(b1)) => in.equal(a1, b1)
+        case (Not(a1), Not(b1)) => in.equal(a1, b1)
+        case (Length(a1), Length(b1)) => in.equal(a1, b1)
+        case (Lower(a1), Lower(b1)) => in.equal(a1, b1)
+        case (Upper(a1), Upper(b1)) => in.equal(a1, b1)
+        case (Bool(a1), Bool(b1)) => in.equal(a1, b1)
+        case (Integer(a1), Integer(b1)) => in.equal(a1, b1)
+        case (Decimal(a1), Decimal(b1)) => in.equal(a1, b1)
+        case (Null(a1), Null(b1)) => in.equal(a1, b1)
+        case (ToString(a1), ToString(b1)) => in.equal(a1, b1)
+        case (MakeArray(a1), MakeArray(b1)) => in.equal(a1, b1)
+        case (DupArrayIndices(a1), DupArrayIndices(b1)) => in.equal(a1, b1)
+        case (DupMapKeys(a1), DupMapKeys(b1)) => in.equal(a1, b1)
+
+        case (Extract(a1, a2), Extract(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Add(a1, a2), Add(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Multiply(a1, a2), Multiply(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Subtract(a1, a2), Subtract(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Divide(a1, a2), Divide(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Modulo(a1, a2), Modulo(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Power(a1, a2), Power(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Eq(a1, a2), Eq(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Neq(a1, a2), Neq(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Lt(a1, a2), Lt(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Lte(a1, a2), Lte(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Gt(a1, a2), Gt(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Gte(a1, a2), Gte(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (IfUndefined(a1, a2), IfUndefined(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (And(a1, a2), And(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Or(a1, a2), Or(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Coalesce(a1, a2), Coalesce(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (In(a1, a2), In(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Within(a1, a2), Within(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Constantly(a1, a2), Constantly(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (MakeObject(a1, a2), MakeObject(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (ConcatObjects(a1, a2), ConcatObjects(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (ProjectIndex(a1, a2), ProjectIndex(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (ProjectField(a1, a2), ProjectField(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (DeleteField(a1, a2), DeleteField(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (ConcatArrays(a1, a2), ConcatArrays(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+        case (Range(a1, a2), Range(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
+
+        //  ternary
+        case (Between(a1, a2, a3), Between(b1, b2, b3)) => in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+        case (Cond(a1, a2, a3), Cond(b1, b2, b3)) => in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+        case (Like(a1, a2, a3), Like(b1, b2, b3)) => in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+        case (Search(a1, a2, a3), Search(b1, b2, b3)) => in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+        case (Substring(a1, a2, a3), Substring(b1, b2, b3)) => in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+        case (Guard(a1, atpe, a2, a3), Guard(b1, btpe, b2, b3)) => atpe ≟ btpe && in.equal(a1, b1) && in.equal(a2, b2) && in.equal(a3, b3)
+
         case (_, _) => false
       }
     }
 
+  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
     new Delay[Show, MapFunc[T, ?]] {
       def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
@@ -138,7 +250,7 @@ object MapFunc {
         case ConcatObjects(a1, a2) => Cord("ConcatObjects(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case ProjectField(a1, a2) => Cord("ProjectField(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case Eq(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
-        case x => { scala.Predef.print(s">>>>>>>>>>> got a show $x"); ??? }
+        case x => { scala.Predef.print(s">>>>>>>>>>> got a show $x"); ??? } // TODO the rest
       }
     }
 
