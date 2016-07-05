@@ -590,7 +590,8 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       // we assign extra variables because of:
       // https://issues.scala-lang.org/browse/SI-5589
       // https://issues.scala-lang.org/browse/SI-7515
-      for {
+
+      (for {
         bucket0 <- findBucket(a1)
         (bucketSrc, bucket, thing) = bucket0
         merged0 <- merge3(a2, a3, bucketSrc)
@@ -604,29 +605,31 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         }
 
         // TODO handle errors
-        val orderList: String \/ List[SortDir] = {
-          val orderStrs: String \/ List[String] = rebase(rebasedArrays, order) match {
-            case ConcatArraysN(as) => as.traverse(StrLit.unapply(_)) \/> "oops" // disjunctionify
+        val orderList: PlannerError \/ List[SortDir] = {
+          val orderStrs: PlannerError \/ List[String] = rebase(rebasedArrays, order) match {
+            case ConcatArraysN(as) => as.traverse(StrLit.unapply(_)) \/> InternalError("unsupported ordering type") // disjunctionify
             case StrLit(str) => List(str).right
-            case _ => "oops".left
+            case _ => InternalError("unsupported ordering function").left
           }
           orderStrs.flatMap {
             _.traverse {
               case "ASC" => SortDir.Ascending.right
               case "DESC" => SortDir.Descending.right
-              case _ => "oops".left
+              case _ => InternalError("unsupported ordering direction").left
             }
           }
         }
 
-        val lists: String \/ List[(FreeMap[T], SortDir)] =
+        val lists: PlannerError \/ List[(FreeMap[T], SortDir)] =
           orderList.map { keysList.zip(_) }
 
-        QScriptCoreInternal[T].inj(Sort(
-          ThetaJoinInternal[T].inj(src).embed,
-          rebase(bucket, buckets),
-          lists.fold(_ => Nil, scala.Predef.identity))) // TODO errors must escape
-      }
+        (lists.map { pairs =>
+          QScriptCoreInternal[T].inj(Sort(
+            ThetaJoinInternal[T].inj(src).embed,
+            rebase(bucket, buckets),
+            pairs))
+        }).liftM[StateT[?[_], NameGen, ?]]
+      }).join
     }
 
     case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
