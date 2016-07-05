@@ -150,12 +150,6 @@ class Transform[T[_[_]]: Recursive: Corecursive](
 
   type DoubleFreeMap = (FreeMap[T], FreeMap[T])
 
-  val DeadEndInternal = implicitly[Const[DeadEnd, ?] :<: QScriptInternal[T, ?]]
-  val SourcedPathableInternal = implicitly[SourcedPathable[T, ?] :<: QScriptInternal[T, ?]]
-  val QScriptCoreInternal = implicitly[QScriptCore[T, ?] :<: QScriptInternal[T, ?]]
-  val ThetaJoinInternal = implicitly[ThetaJoin[T, ?] :<: QScriptInternal[T, ?]]
-  val QScriptBucketInternal = implicitly[QScriptBucket[T, ?] :<: QScriptInternal[T, ?]]
-
   def linearize[F[_]: Functor: Foldable]: Algebra[F, List[F[Unit]]] =
     fl => fl.void :: fl.fold
 
@@ -212,7 +206,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     val AbsMerge(merged, left, right) = merge(values(0), values(1))
     val res = makeBasicTheta(merged, left, right)
 
-    Map(ThetaJoinInternal.inj(res.src).embed, Free.roll(func(res.left, res.right)))
+    Map(ThetaJoinInternal[T].inj(res.src).embed, Free.roll(func(res.left, res.right)))
   }
 
   def merge2Expansion(
@@ -223,7 +217,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     val res = makeBasicTheta(merged, left, right)
 
     LeftShift(
-      ThetaJoinInternal.inj(res.src).embed,
+      ThetaJoinInternal[T].inj(res.src).embed,
       Free.roll(func(res.left, res.right)),
       Free.point(RightSide)) // TODO Does this add a bucket for the range values? (values mirrored in buckets)
   }
@@ -242,7 +236,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     val AbsMerge(src0, first, second) =
       makeBasicTheta(merged0, first0, second0)
     val AbsMerge(src, fands, third) =
-      makeBasicTheta(ThetaJoinInternal.inj(src0).embed, fands0, third0)
+      makeBasicTheta(ThetaJoinInternal[T].inj(src0).embed, fands0, third0)
 
     Merge3(src, first, second, fands, third)
   }
@@ -255,7 +249,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
 
     val merged: Merge3 = merge3(values(0), values(1), values(2))
 
-    Map(ThetaJoinInternal.inj(merged.src).embed, Free.roll(func(
+    Map(ThetaJoinInternal[T].inj(merged.src).embed, Free.roll(func(
       rebase(merged.fands, merged.first),
       rebase(merged.fands, merged.second),
       merged.third)))
@@ -292,13 +286,13 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       //   id(p, x:bar) - 2
       // (one bucket)
       case structural.FlattenMap =>
-        SourcedPathableInternal.inj(LeftShift(
+        SourcedPathableInternal[T].inj(LeftShift(
           values(0),
           UnitF,
           Free.point(RightSide)))
 
       case structural.FlattenArray =>
-        SourcedPathableInternal.inj(LeftShift(
+        SourcedPathableInternal[T].inj(LeftShift(
           values(0),
           UnitF,
           Free.point(RightSide)))
@@ -311,12 +305,12 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       //   id(p, y:bar) - bar
       // (one bucket)
       case structural.FlattenMapKeys =>
-        SourcedPathableInternal.inj(LeftShift(
+        SourcedPathableInternal[T].inj(LeftShift(
           values(0),
           Free.roll(DupMapKeys(UnitF)),
           Free.point(RightSide)))
       case structural.FlattenArrayIndices =>
-        SourcedPathableInternal.inj(LeftShift(
+        SourcedPathableInternal[T].inj(LeftShift(
           values(0),
           Free.roll(DupArrayIndices(UnitF)),
           Free.point(RightSide)))
@@ -329,13 +323,13 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       //   id(p, y, bar) - 2
       // (two buckets)
       case structural.ShiftMap =>
-        QScriptBucketInternal.inj(LeftShiftBucket(
+        QScriptBucketInternal[T].inj(LeftShiftBucket(
           values(0),
           UnitF,
           Free.point(RightSide),
           Free.roll(DupMapKeys(UnitF)))) // affects bucketing metadata
       case structural.ShiftArray =>
-        QScriptBucketInternal.inj(LeftShiftBucket(
+        QScriptBucketInternal[T].inj(LeftShiftBucket(
           values(0),
           UnitF,
           Free.point(RightSide),
@@ -349,13 +343,13 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       //   id(p, y, bar) - bar
       // (two buckets)
       case structural.ShiftMapKeys =>
-        QScriptBucketInternal.inj(LeftShiftBucket(
+        QScriptBucketInternal[T].inj(LeftShiftBucket(
           values(0),
           Free.roll(DupMapKeys(UnitF)),
           Free.point(RightSide),
           UnitF)) // affects bucketing metadata
       case structural.ShiftArrayIndices =>
-        QScriptBucketInternal.inj(LeftShiftBucket(
+        QScriptBucketInternal[T].inj(LeftShiftBucket(
           values(0),
           Free.roll(DupArrayIndices(UnitF)),
           Free.point(RightSide),
@@ -393,19 +387,19 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       case -\/(GroupBy(src, _, bucket)) =>
         val AbsMerge(merged, left, right) = merge(src, inner)
         val res = makeBasicTheta(merged, left, right)
-        (ThetaJoinInternal.inj(res.src).embed, rebase(bucket, res.left), res.right)
+        (ThetaJoinInternal[T].inj(res.src).embed, rebase(bucket, res.left), res.right)
       case -\/(BucketField(src, _, name)) =>
         val AbsMerge(merged, left, right) = merge(src, inner)
         val res = makeBasicTheta(merged, left, right)
-        (ThetaJoinInternal.inj(res.src).embed, rebase(name, res.left), res.right)
+        (ThetaJoinInternal[T].inj(res.src).embed, rebase(name, res.left), res.right)
       case -\/(BucketIndex(src, _, index)) =>
         val AbsMerge(merged, left, right) = merge(src, inner)
         val res = makeBasicTheta(merged, left, right)
-        (ThetaJoinInternal.inj(res.src).embed, rebase(index, res.left), res.right)
+        (ThetaJoinInternal[T].inj(res.src).embed, rebase(index, res.left), res.right)
       case -\/(LeftShiftBucket(src, struct, _, bucket)) =>
         val AbsMerge(merged, left, right) = merge(src, inner)
         val res = makeBasicTheta(merged, left, right)
-        (ThetaJoinInternal.inj(res.src).embed, rebase(rebase(struct, bucket), res.left), res.right)
+        (ThetaJoinInternal[T].inj(res.src).embed, rebase(rebase(struct, bucket), res.left), res.right)
       // TODO in the cases below do we need to merge src?
       case -\/(SquashBucket(src)) =>
         (inner, Free.roll(Nullary(CommonEJson.inj(ejson.Null[T[EJson]]()).embed)), UnitF) // singleton provenance - one big bucket
@@ -486,18 +480,18 @@ class Transform[T[_[_]]: Recursive: Corecursive](
 
   def lpToQScript: LogicalPlan[Inner] => QScriptInternal[T, Inner] = {
     case LogicalPlan.ReadF(path) =>
-      SourcedPathableInternal.inj(Map(
-        CorecursiveOps[T, QScriptInternal[T, ?]](DeadEndInternal.inj(Const[DeadEnd, Inner](Root))).embed,
+      SourcedPathableInternal[T].inj(Map(
+        CorecursiveOps[T, QScriptInternal[T, ?]](DeadEndInternal[T].inj(Const[DeadEnd, Inner](Root))).embed,
         pathToProj(path)))
 
-    case LogicalPlan.ConstantF(data) => SourcedPathableInternal.inj(Map(
-      DeadEndInternal.inj(Const[DeadEnd, Inner](Root)).embed,
+    case LogicalPlan.ConstantF(data) => SourcedPathableInternal[T].inj(Map(
+      DeadEndInternal[T].inj(Const[DeadEnd, Inner](Root)).embed,
       Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](fromData(data).fold(
         error => CommonEJson.inj(ejson.Str[T[EJson]](error)).embed,
         x => x)))))
 
-    case LogicalPlan.FreeF(name) => SourcedPathableInternal.inj(Map(
-      DeadEndInternal.inj(Const[DeadEnd, Inner](Empty)).embed,
+    case LogicalPlan.FreeF(name) => SourcedPathableInternal[T].inj(Map(
+      DeadEndInternal[T].inj(Const[DeadEnd, Inner](Empty)).embed,
       Free.roll(ProjectField(StrLit(name.toString), UnitF[T]))))
 
     // TODO namegen
@@ -505,9 +499,9 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       val AbsMerge(src, jb1, jb2) = merge(form, body)
       makeBasicTheta(src, jb1, jb2) match {
         case AbsMerge(src, fm1, fm2) =>
-          SourcedPathableInternal.inj(Map(
-            SourcedPathableInternal.inj(Map(
-              ThetaJoinInternal.inj(src).embed,
+          SourcedPathableInternal[T].inj(Map(
+            SourcedPathableInternal[T].inj(Map(
+              ThetaJoinInternal[T].inj(src).embed,
               Free.roll(ConcatObjects(
                 Free.roll(MakeObject(StrLit("tmp1"), UnitF[T])),
                 Free.roll(MakeObject(StrLit(name.toString), fm1)))))).embed,
@@ -515,45 +509,45 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       }
 
     case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
-      SourcedPathableInternal.inj(merge3Map(
+      SourcedPathableInternal[T].inj(merge3Map(
         Func.Input3(expr, cont, fallback))(
         Guard(_, typ, _, _)))
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Mapping =>
-      SourcedPathableInternal.inj(invokeMapping1(func, Func.Input1(a1)))
+      SourcedPathableInternal[T].inj(invokeMapping1(func, Func.Input1(a1)))
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
       val AbsMerge(merged, left, right) = merge(a1, a2)
       val res = makeBasicTheta(merged, left, right)
-      QScriptBucketInternal.inj(BucketField(
-        ThetaJoinInternal.inj(res.src).embed,
+      QScriptBucketInternal[T].inj(BucketField(
+        ThetaJoinInternal[T].inj(res.src).embed,
         res.left,
         res.right))
 
     case LogicalPlan.InvokeFUnapply(structural.ArrayProject, Sized(a1, a2)) =>
       val AbsMerge(merged, left, right) = merge(a1, a2)
       val res = makeBasicTheta(merged, left, right)
-      QScriptBucketInternal.inj(BucketIndex(
-        ThetaJoinInternal.inj(res.src).embed,
+      QScriptBucketInternal[T].inj(BucketIndex(
+        ThetaJoinInternal[T].inj(res.src).embed,
         res.left,
         res.right))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Mapping =>
-      SourcedPathableInternal.inj(invokeMapping2(func, Func.Input2(a1, a2)))
+      SourcedPathableInternal[T].inj(invokeMapping2(func, Func.Input2(a1, a2)))
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3)) if func.effect == Mapping =>
-      SourcedPathableInternal.inj(invokeMapping3(func, Func.Input3(a1, a2, a3)))
+      SourcedPathableInternal[T].inj(invokeMapping3(func, Func.Input3(a1, a2, a3)))
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Reduction =>
-      QScriptCoreInternal.inj(invokeReduction1(func, Func.Input1(a1)))
+      QScriptCoreInternal[T].inj(invokeReduction1(func, Func.Input1(a1)))
 
     case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-      QScriptCoreInternal.inj(Take(src, jb1, jb2))
+      QScriptCoreInternal[T].inj(Take(src, jb1, jb2))
 
     case LogicalPlan.InvokeFUnapply(set.Drop, Sized(a1, a2)) =>
       val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-      QScriptCoreInternal.inj(Drop(src, jb1, jb2))
+      QScriptCoreInternal[T].inj(Drop(src, jb1, jb2))
 
     case LogicalPlan.InvokeFUnapply(set.OrderBy, Sized(a1, a2, a3)) => {
       val (bucketSrc, bucket, thing) = findBucket(a1)
@@ -587,8 +581,8 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       val lists: String \/ List[(FreeMap[T], SortDir)] =
         orderList.map { keysList.zip(_) }
       
-      QScriptCoreInternal.inj(Sort(
-        ThetaJoinInternal.inj(src).embed,
+      QScriptCoreInternal[T].inj(Sort(
+        ThetaJoinInternal[T].inj(src).embed,
         rebase(bucket, buckets),
         lists.fold(_ => Nil, scala.Predef.identity))) // TODO errors must escape
     }
@@ -598,21 +592,21 @@ class Transform[T[_[_]]: Recursive: Corecursive](
 
       makeBasicTheta(src, jb1, jb2) match {
         case AbsMerge(src, fm1, fm2) =>
-          SourcedPathableInternal.inj(Map(
-            QScriptCoreInternal.inj(Filter(ThetaJoinInternal.inj(src).embed, fm2)).embed,
+          SourcedPathableInternal[T].inj(Map(
+            QScriptCoreInternal[T].inj(Filter(ThetaJoinInternal[T].inj(src).embed, fm2)).embed,
             fm1))
       }
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Squashing =>
       func match {
-        case identity.Squash => QScriptBucketInternal.inj(SquashBucket(a1))
+        case identity.Squash => QScriptBucketInternal[T].inj(SquashBucket(a1))
       }
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect == Expansion =>
       invokeExpansion1(func, Func.Input1(a1))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Expansion =>
-      SourcedPathableInternal.inj(invokeExpansion2(func, Func.Input2(a1, a2)))
+      SourcedPathableInternal[T].inj(invokeExpansion2(func, Func.Input2(a1, a2)))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect == Transformation =>
       func match {
@@ -620,17 +614,17 @@ class Transform[T[_[_]]: Recursive: Corecursive](
           val AbsMerge(merged0, source0, bucket0) = merge(a1, a2)
           makeBasicTheta(merged0, source0, bucket0) match {
             case AbsMerge(merged, source, bucket) =>
-              QScriptBucketInternal.inj(GroupBy(ThetaJoinInternal.inj(merged).embed, source, bucket))
+              QScriptBucketInternal[T].inj(GroupBy(ThetaJoinInternal[T].inj(merged).embed, source, bucket))
           }
         case set.Union =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-          SourcedPathableInternal.inj(Union(src, jb1, jb2))
+          SourcedPathableInternal[T].inj(Union(src, jb1, jb2))
         case set.Intersect =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-          ThetaJoinInternal.inj(ThetaJoin(src, jb1, jb2, basicJF, Inner, Free.point(LeftSide)))
+          ThetaJoinInternal[T].inj(ThetaJoin(src, jb1, jb2, basicJF, Inner, Free.point(LeftSide)))
         case set.Except =>
           val AbsMerge(src, jb1, jb2) = merge(a1, a2)
-          ThetaJoinInternal.inj(ThetaJoin(
+          ThetaJoinInternal[T].inj(ThetaJoin(
             src,
             jb1,
             jb2,
@@ -641,7 +635,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))  if func.effect == Transformation=>
       def invoke(tpe: JoinType): QScriptInternal[T, Inner] =
-        ThetaJoinInternal.inj(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
+        ThetaJoinInternal[T].inj(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
 
       //scala.Predef.println(s"left:  ${a1.shows}")
       //scala.Predef.println(s"right: ${a2.shows}")

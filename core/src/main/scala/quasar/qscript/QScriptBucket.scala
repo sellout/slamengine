@@ -161,7 +161,7 @@ object QScriptBucket {
           else
             ((s - 1, src)).right[QScriptBucket[T, Inner]]
         }
-        case sq @ SquashBucket(_) => StateT { s =>
+        case sq @ SquashBucket(_) => StateT { _ =>
           sq.left[(Int, Inner)]
         }
       }
