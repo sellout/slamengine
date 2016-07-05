@@ -83,12 +83,16 @@ object QScriptBucket {
         f: A => G[B])(
         implicit G: Applicative[G]):
           G[QScriptBucket[T, B]] = fa match {
-        case GroupBy(src, values, bucket) => f(src) ∘ (GroupBy(_, values, bucket))
-        case BucketField(src, values, name) => f(src) ∘ (BucketField(_, values, name))
-        case BucketIndex(src, values, index) => f(src) ∘ (BucketIndex(_, values, index))
+        case GroupBy(src, values, bucket) =>
+          f(src) ∘ (GroupBy(_, values, bucket))
+        case BucketField(src, values, name) =>
+          f(src) ∘ (BucketField(_, values, name))
+        case BucketIndex(src, values, index) =>
+          f(src) ∘ (BucketIndex(_, values, index))
         case LeftShiftBucket(src, struct, repair, bucket) =>
           f(src) ∘ (LeftShiftBucket(_, struct, repair, bucket))
-        case SquashBucket(src) => f(src) ∘ (SquashBucket(_))
+        case SquashBucket(src) =>
+          f(src) ∘ (SquashBucket(_))
       }
     }
 
