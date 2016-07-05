@@ -105,7 +105,6 @@ object MapFunc {
   //     }).embed, f)))
   // }
 
-  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def functor[T[_[_]]]: Functor[MapFunc[T, ?]] = new Functor[MapFunc[T, ?]] {
     def map[A, B](fa: MapFunc[T, A])(f: A => B): MapFunc[T, B] =
       fa match {
@@ -172,11 +171,11 @@ object MapFunc {
       }
   }
 
-  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]):
       Delay[Equal, MapFunc[T, ?]] =
     new Delay[Equal, MapFunc[T, ?]] {
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
+        // nullary
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
 
         // unary
@@ -240,17 +239,69 @@ object MapFunc {
       }
     }
 
-  // TODO generate using shapeless (see typelevel/shapeless-contrib)
   implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
     new Delay[Show, MapFunc[T, ?]] {
       def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
+        // nullary
         case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
+
+        // unary
+        case Date(a1) => Cord("Date(") ++ sh.show(a1) ++ Cord(")")
+        case Time(a1) => Cord("Time(") ++ sh.show(a1) ++ Cord(")")
+        case Timestamp(a1) => Cord("Timestamp(") ++ sh.show(a1) ++ Cord(")")
+        case Interval(a1) => Cord("Interval(") ++ sh.show(a1) ++ Cord(")")
+        case TimeOfDay(a1) => Cord("TimeOfDay(") ++ sh.show(a1) ++ Cord(")")
+        case ToTimestamp(a1) => Cord("ToTimestamp(") ++ sh.show(a1) ++ Cord(")")
         case Negate(a1) => Cord("Negate(") ++ sh.show(a1) ++ Cord(")")
+        case Not(a1) => Cord("Not(") ++ sh.show(a1) ++ Cord(")")
+        case Length(a1) => Cord("Length(") ++ sh.show(a1) ++ Cord(")")
+        case Lower(a1) => Cord("Lower(") ++ sh.show(a1) ++ Cord(")")
+        case Upper(a1) => Cord("Upper(") ++ sh.show(a1) ++ Cord(")")
+        case Bool(a1) => Cord("Bool(") ++ sh.show(a1) ++ Cord(")")
+        case Integer(a1) => Cord("Integer(") ++ sh.show(a1) ++ Cord(")")
+        case Decimal(a1) => Cord("Decimal(") ++ sh.show(a1) ++ Cord(")")
+        case Null(a1) => Cord("Null(") ++ sh.show(a1) ++ Cord(")")
+        case ToString(a1) => Cord("ToString(") ++ sh.show(a1) ++ Cord(")")
+        case MakeArray(a1) => Cord("MakeArray(") ++ sh.show(a1) ++ Cord(")")
+        case DupArrayIndices(a1) => Cord("DupArrayIndices(") ++ sh.show(a1) ++ Cord(")")
+        case DupMapKeys(a1) => Cord("DupMapKeys(") ++ sh.show(a1) ++ Cord(")")
+
+        // binary
+        case Extract(a1, a2) => Cord("Extract(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Add(a1, a2) => Cord("Add(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Multiply(a1, a2) => Cord("Multiply(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Subtract(a1, a2) => Cord("Subtract(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Divide(a1, a2) => Cord("Divide(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Modulo(a1, a2) => Cord("Modulo(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Power(a1, a2) => Cord("Power(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Eq(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Neq(a1, a2) => Cord("Neq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Lt(a1, a2) => Cord("Lt(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Lte(a1, a2) => Cord("Lte(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Gt(a1, a2) => Cord("Gt(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Gte(a1, a2) => Cord("Gte(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case IfUndefined(a1, a2) => Cord("IfUndefined(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case And(a1, a2) => Cord("And(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Or(a1, a2) => Cord("Or(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Coalesce(a1, a2) => Cord("Coalesce(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case In(a1, a2) => Cord("In(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Within(a1, a2) => Cord("Within(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Constantly(a1, a2) => Cord("Constantly(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case MakeObject(a1, a2) => Cord("MakeObject(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case ConcatObjects(a1, a2) => Cord("ConcatObjects(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case ProjectIndex(a1, a2) => Cord("ProjectIndex(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
         case ProjectField(a1, a2) => Cord("ProjectField(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
-        case Eq(a1, a2) => Cord("Eq(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
-        case x => { scala.Predef.print(s">>>>>>>>>>> got a show $x"); ??? } // TODO the rest
+        case DeleteField(a1, a2) => Cord("DeleteField(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case ConcatArrays(a1, a2) => Cord("ConcatArrays(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+        case Range(a1, a2) => Cord("Range(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
+
+        //  ternary
+        case Between(a1, a2, a3) => Cord("Between(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
+        case Cond(a1, a2, a3) => Cord("Cond(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
+        case Like(a1, a2, a3) => Cord("Like(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
+        case Search(a1, a2, a3) => Cord("Search(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
+        case Substring(a1, a2, a3) => Cord("Substring(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
+        case Guard(a1, tpe, a2, a3) => Cord("Guard(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2) ++ Cord(", ") ++ sh.show(a3) ++ Cord(")")
       }
     }
 
