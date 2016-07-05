@@ -41,7 +41,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   val elide = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
 
   def callIt(lp: Fix[LP]): InnerPure =
-    lp.transCata(lpToQScript)
+    lp.transCataM(lpToQScript).evalZero
       .transCata(elide.purify)
        // .transCata(liftFG(normalizeMapFunc))
       .transCata(
