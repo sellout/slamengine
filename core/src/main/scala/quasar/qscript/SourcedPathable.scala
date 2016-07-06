@@ -123,9 +123,9 @@ object SourcedPathable {
               Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit("tmp2")))
 
             AbsMerge[IT, SourcedPathable[IT, Unit], FreeMap](Map((), Free.roll[MapFunc[IT, ?], Unit](
-              ConcatObjects(
-                Free.roll[MapFunc[IT, ?], Unit](MakeObject(StrLit("tmp1"), rebase(m1, left))),
-                Free.roll[MapFunc[IT, ?], Unit](MakeObject(StrLit("tmp2"), rebase(m2, right)))))),
+              ConcatMaps(
+                Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit("tmp1"), rebase(m1, left))),
+                Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit("tmp2"), rebase(m2, right)))))),
               lf, rf).some
           }
           case _ => None

@@ -560,4 +560,9 @@ package object fp
     */
   def recover[F[_], A](φ: Algebra[F, A]): Algebra[CoEnv[A, F, ?], A] =
     interpret(ι, φ)
+
+  object Inj {
+    def unapply[F[_], G[_], A](g: G[A])(implicit F: F :<: G): Option[F[A]] =
+      F.prj(g)
+  }
 }

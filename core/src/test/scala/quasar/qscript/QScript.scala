@@ -21,6 +21,7 @@ import quasar.Predef._
 import quasar.{LogicalPlan, Data, CompilerHelpers}
 import quasar.{LogicalPlan => LP}
 import quasar.fp._
+import quasar.fp.free._
 import quasar.fs._
 import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
@@ -44,9 +45,9 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   def callIt(lp: Fix[LP]): PlannerError \/ InnerPure =
     lp.transCataM(lpToQScript).evalZero.map {
       _.transCata(elide.purify)
-       // .transCata(liftFG(normalizeMapFunc))
       .transCata(
         liftFG(elideNopJoin[QScriptPure[Fix, ?]]) ⋙
+        injectedNT[SourcedPathable[Fix, ?], QScriptPure[Fix, ?]](normalize).apply ⋙
         liftFG(elideNopMap[QScriptPure[Fix, ?]]) ⋙
         liftFF(coalesceMaps[QScriptPure[Fix, ?]]))
     }

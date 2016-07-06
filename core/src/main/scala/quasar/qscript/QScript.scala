@@ -274,11 +274,11 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     } yield {
       AbsMerge[T, ThetaJoin[T, A], FreeMap](
         ThetaJoin(src, left, right, basicJF, Inner,
-          Free.roll(ConcatObjects(
-            Free.roll(MakeObject(
+          Free.roll(ConcatMaps(
+            Free.roll(MakeMap(
               StrLit(leftName),
               Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-            Free.roll(MakeObject(
+            Free.roll(MakeMap(
               StrLit(rightName),
               Free.point[MapFunc[T, ?], JoinSide](RightSide)))))),
         Free.roll(ProjectField(UnitF[T], StrLit(leftName))),
@@ -483,9 +483,9 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       rightBr,
       on,
       Inner,
-      Free.roll(ConcatObjects(
-        Free.roll(MakeObject(StrLit("left"), Free.point(LeftSide))),
-        Free.roll(MakeObject(StrLit("right"), Free.point(RightSide))))))
+      Free.roll(ConcatMaps(
+        Free.roll(MakeMap(StrLit("left"), Free.point(LeftSide))),
+        Free.roll(MakeMap(StrLit("right"), Free.point(RightSide))))))
   }
 
   def pathToProj(path: pathy.Path[_, _, _]): FreeMap[T] =
@@ -533,9 +533,9 @@ class Transform[T[_[_]]: Recursive: Corecursive](
         SourcedPathableInternal[T].inj(Map(
           SourcedPathableInternal[T].inj(Map(
             ThetaJoinInternal[T].inj(theta.src).embed,
-            Free.roll(ConcatObjects(
-              Free.roll(MakeObject(StrLit(tmpName), UnitF[T])),
-              Free.roll(MakeObject(StrLit(name.toString), theta.left)))))).embed,
+            Free.roll(ConcatMaps(
+              Free.roll(MakeMap(StrLit(tmpName), UnitF[T])),
+              Free.roll(MakeMap(StrLit(name.toString), theta.left)))))).embed,
           rebase(theta.right, Free.roll(ProjectField(UnitF[T], StrLit(tmpName))))))
       }
 
@@ -709,13 +709,20 @@ class Optimize[T[_[_]]: Recursive: Corecursive](
     case x                          => SP.inj(x)
   }
 
-  // def normalizeMapFunc: SourcedPathable[T, ?] ~> SourcedPathable[T, ?] =
-  //   new (SourcedPathable[T, ?] ~> SourcedPathable[T, ?]) {
-  //     def apply[A](sp: SourcedPathable[T, A]) = sp match {
-  //       case Map(src, f) => Map(src, f.transCata(repeatedly(MapFunc.normalize)))
-  //       case x           => x
-  //     }
-  //   }
+  def normalizeMapFunc[A]: Free[MapFunc[T, ?], A] => Free[MapFunc[T, ?], A] =
+    _.ana[Mu, CoEnv[A, MapFunc[T, ?], ?]](CoEnv.freeIso[A, MapFunc[T, ?]].reverseGet)
+      .transCata[CoMF[T, A, ?]](repeatedly(MapFunc.normalize))
+      .cata(CoEnv.freeIso[A, MapFunc[T, ?]].get)
+
+  // TODO: Make this a type class, extend it to other components.
+  def normalize: SourcedPathable[T, ?] ~> SourcedPathable[T, ?] =
+    new (SourcedPathable[T, ?] ~> SourcedPathable[T, ?]) {
+      def apply[A](sp: SourcedPathable[T, A]) = sp match {
+        case Map(src, f)          => Map(src, normalizeMapFunc(f))
+        case LeftShift(src, s, r) => LeftShift(src, normalizeMapFunc(s), normalizeMapFunc(r))
+        case x                    => x
+      }
+    }
 
   def elideNopJoin[F[_]](
     implicit Th: ThetaJoin[T, ?] :<: F,
