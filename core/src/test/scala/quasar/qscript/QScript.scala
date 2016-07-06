@@ -89,7 +89,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
       // Map(Root, ObjectProject(ObjectProject(ObjectProject((), "some"), "foo"), "bar"))
     }
 
-    "convert a basic invoke" in pending {  // TODO normalization
+    "convert a basic invoke" in {  // TODO normalization
       callIt(math.Add(lpRead("/foo"), lpRead("/bar")).embed).toOption must
       equal(
         SourcedPathablePure.inj(
