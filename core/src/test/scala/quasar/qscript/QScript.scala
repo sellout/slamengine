@@ -54,6 +54,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
         liftFG(elideNopJoin[QScriptPure[Fix, ?]]) ⋙
         liftFF(coalesceMaps[QScriptPure[Fix, ?]]) ⋙
         injectedNT[SourcedPathable[Fix, ?], QScriptPure[Fix, ?]](normalize).apply ⋙
+        liftFG(coalesceMapJoin[QScriptPure[Fix, ?]]) ⋙ // NB: move this before normalize, once we normalize ThetaJoins
         liftFG(elideNopMap[QScriptPure[Fix, ?]]))
     }
 
@@ -104,7 +105,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
               ProjectFieldR(UnitF, StrLit("bar")))))).embed.some)
     }
 
-    "convert basic join" in pending {  // TODO normalization
+    "convert basic join" in {  // TODO normalization
       //"select foo.name, bar.address from foo join bar on foo.id = bar.foo_id",
 
       val lp = LP.Let('__tmp0, lpRead("/foo"),

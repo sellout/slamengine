@@ -700,6 +700,13 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT] extends Helpers[
 
 class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
 
+  // TODO: These optimizations should give rise to various property tests:
+  //       • elideNopMap ⇒ no `Map(???, UnitF)`
+  //       • normalize ⇒ a whole bunch, based on MapFuncs
+  //       • elideNopJoin ⇒ no `ThetaJoin(???, UnitF, UnitF, LeftSide == RightSide, ???, ???)`
+  //       • coalesceMaps ⇒ no `Map(Map(???, ???), ???)`
+  //       • coalesceMapJoin ⇒ no `Map(ThetaJoin(???, …), ???)`
+
   def elideNopMap[F[_]: Functor](
     implicit SP: SourcedPathable[T, ?] :<: F):
       SourcedPathable[T, T[F]] => F[T[F]] = {
@@ -723,8 +730,7 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     }
 
   def elideNopJoin[F[_]](
-    implicit Th: ThetaJoin[T, ?] :<: F,
-    SP: SourcedPathable[T, ?] :<: F):
+    implicit Th: ThetaJoin[T, ?] :<: F, SP: SourcedPathable[T, ?] :<: F):
       ThetaJoin[T, T[F]] => F[T[F]] = {
     case ThetaJoin(src, l, r, on, _, combine)
         if l ≟ Free.point(()) && r ≟ Free.point(()) && on ≟ basicJF =>
@@ -741,5 +747,15 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
       case _ => x
     }
     case x => x
+  }
+
+  def coalesceMapJoin[F[_]: Functor](
+    implicit SP: SourcedPathable[T, ?] :<: F, TJ: ThetaJoin[T, ?] :<: F):
+      SourcedPathable[T, T[F]] => F[T[F]] = {
+    case x @ Map(Embed(src), mf) =>
+      TJ.prj(src).fold(
+        SP.inj(x))(
+        tj => TJ.inj(ThetaJoin.combine.modify((cf: JoinFunc[T]) => (mf.map(κ(cf))).join)(tj)))
+    case x => SP.inj(x)
   }
 }
