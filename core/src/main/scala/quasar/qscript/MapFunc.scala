@@ -193,8 +193,7 @@ object MapFunc {
       }
   }
 
-  implicit def equal[T[_[_]], A](implicit eqTEj: Equal[T[EJson]]):
-      Delay[Equal, MapFunc[T, ?]] =
+  implicit def equal[T[_[_]]: EqualT, A]: Delay[Equal, MapFunc[T, ?]] =
     new Delay[Equal, MapFunc[T, ?]] {
       def apply[A](in: Equal[A]): Equal[MapFunc[T, A]] = Equal.equal {
         // nullary
@@ -259,11 +258,11 @@ object MapFunc {
       }
     }
 
-  implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, MapFunc[T, ?]] =
+  implicit def show[T[_[_]]: ShowT]: Delay[Show, MapFunc[T, ?]] =
     new Delay[Show, MapFunc[T, ?]] {
       def apply[A](sh: Show[A]): Show[MapFunc[T, A]] = Show.show {
         // nullary
-        case Nullary(v) => Cord("Nullary(") ++ shEj.show(v) ++ Cord(")")
+        case Nullary(v) => Cord("Nullary(") ++ v.show ++ Cord(")")
 
         // unary
         case Date(a1) => Cord("Date(") ++ sh.show(a1) ++ Cord(")")

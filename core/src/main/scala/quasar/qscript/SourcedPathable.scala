@@ -17,7 +17,6 @@
 package quasar.qscript
 
 import quasar.Predef._
-import quasar.ejson.{Int => _, _}
 import quasar.fp._
 import quasar.qscript.MapFuncs._
 
@@ -61,7 +60,7 @@ sealed abstract class SourcedPathable[T[_[_]], A] {
     extends SourcedPathable[T, A]
 
 object SourcedPathable {
-  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Delay[Equal, SourcedPathable[T, ?]] =
+  implicit def equal[T[_[_]]: EqualT]: Delay[Equal, SourcedPathable[T, ?]] =
     new Delay[Equal, SourcedPathable[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
@@ -88,7 +87,7 @@ object SourcedPathable {
         }
     }
 
-  implicit def show[T[_[_]]](implicit shEj: Show[T[EJson]]): Delay[Show, SourcedPathable[T, ?]] =
+  implicit def show[T[_[_]]: ShowT]: Delay[Show, SourcedPathable[T, ?]] =
     new Delay[Show, SourcedPathable[T, ?]] {
       def apply[A](s: Show[A]): Show[SourcedPathable[T, A]] = Show.show(_ match {
         case Map(src, mf) => Cord("Map(") ++
@@ -105,7 +104,7 @@ object SourcedPathable {
       })
     }
 
-  implicit def mergeable[T[_[_]]: Corecursive](implicit shEj: Show[T[EJson]]):
+  implicit def mergeable[T[_[_]]: Corecursive: ShowT]:
       Mergeable.Aux[T, SourcedPathable[T, Unit]] =
     new Mergeable[SourcedPathable[T, Unit]] {
       type IT[F[_]] = T[F]
@@ -122,11 +121,6 @@ object SourcedPathable {
               Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit("tmp1")))
             val rf =
               Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit("tmp2")))
-
-            val x = scala.Predef.implicitly[Show[Free[MapFunc[IT, ?], Unit]]]
-            val x2 = scala.Predef.implicitly[Show[MapFunc[IT, Unit]]]
-            val x3 = scala.Predef.implicitly[Delay[Show, MapFunc[IT, ?]]]
-            val x4 = scala.Predef.implicitly[Show[Unit]]
 
             scala.Predef.println(s"lf>>>> ${lf.show}")
             scala.Predef.println(s"rf>>>> ${rf.show}")

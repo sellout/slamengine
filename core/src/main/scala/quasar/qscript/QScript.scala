@@ -113,8 +113,7 @@ object Read {
   combine: JoinFunc[T])
 
 object EquiJoin {
-  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]):
-      Delay[Equal, EquiJoin[T, ?]] =
+  implicit def equal[T[_[_]]: EqualT]: Delay[Equal, EquiJoin[T, ?]] =
     new Delay[Equal, EquiJoin[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
@@ -145,9 +144,7 @@ trait Helpers[T[_[_]]] {
     Free.roll(Eq(Free.point(LeftSide), Free.point(RightSide)))
 }
 
-class Transform[T[_[_]]: Recursive: Corecursive](
-    implicit showInner: Show[T[QScriptInternal[T, ?]]],
-             eqTEj: Equal[T[EJson]]) extends Helpers[T] {
+class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT] extends Helpers[T] {
 
   type Inner = T[QScriptInternal[T, ?]]
   type InnerPure = T[QScriptPure[T, ?]]
@@ -215,7 +212,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
       QSState[SourcedPathable[T, Inner]] = {
     val AbsMerge(merged, left, right) = merge(values(0), values(1))
     // TODO show for FreeQS
-    scala.Predef.println(s">>>>>>>>>merge2Map \n ${merged.show} \n ${left} \n ${right}")
+    scala.Predef.println(s">>>>>>>>>merge2Map \n ${merged.show} \n ${left.show} \n ${right.show}")
     makeBasicTheta(merged, left, right) map {
       case AbsMerge(src, mfl, mfr) =>
         Map(ThetaJoinInternal[T].inj(src).embed, Free.roll(func(mfl, mfr)))
@@ -701,8 +698,7 @@ class Transform[T[_[_]]: Recursive: Corecursive](
   }
 }
 
-class Optimize[T[_[_]]: Recursive: Corecursive](
-    implicit eqTEj: Equal[T[EJson]]) extends Helpers[T] {
+class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
 
   def elideNopMap[F[_]: Functor](
     implicit SP: SourcedPathable[T, ?] :<: F):

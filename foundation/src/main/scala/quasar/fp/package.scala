@@ -565,15 +565,37 @@ package object fp
     def unapply[F[_], G[_], A](g: G[A])(implicit F: F :<: G): Option[F[A]] =
       F.prj(g)
   }
-  
+
   @typeclass trait EqualT[T[_[_]]] {
     def equal[F[_]](tf1: T[F], tf2: T[F])(implicit del: Delay[Equal, F]): Boolean
-    def equalT[T[_[_]]: EqualT, F[_]](delay: Delay[Equal, F]): Equal[T[F]] =
-      Equal.equal[T[F]] { case (a, b) => equal[F](a, b)(delay) }
+    def equalT[F[_]](delay: Delay[Equal, F]): Equal[T[F]] =
+      Equal.equal[T[F]](equal[F](_, _)(delay))
   }
 
   implicit val equalTFix: EqualT[Fix] = new EqualT[Fix] {
     def equal[F[_]](tf1: Fix[F], tf2: Fix[F])(implicit del: Delay[Equal, F]): Boolean =
-      del(equalT[Fix, F](del)).equal(tf1.unFix, tf2.unFix)
+      del(equalT[F](del)).equal(tf1.unFix, tf2.unFix)
   }
+
+  implicit def equalTEqual[T[_[_]], F[_]](implicit T: EqualT[T], F: Delay[Equal, F]):
+      Equal[T[F]] =
+    T.equalT[F](F)
+
+  @typeclass trait ShowT[T[_[_]]] {
+    def show[F[_]](tf: T[F])(implicit del: Delay[Show, F]): Cord =
+      Cord(shows(tf))
+    def shows[F[_]](tf: T[F])(implicit del: Delay[Show, F]): String =
+      show(tf).toString
+    def showT[F[_]](delay: Delay[Show, F]): Show[T[F]] =
+      Show.show[T[F]](show[F](_)(delay))
+  }
+
+  implicit val showTFix: ShowT[Fix] = new ShowT[Fix] {
+    override def show[F[_]](tf: Fix[F])(implicit del: Delay[Show, F]): Cord =
+      del(showT[F](del)).show(tf.unFix)
+  }
+
+  implicit def showTShow[T[_[_]], F[_]](implicit T: ShowT[T], F: Delay[Show, F]):
+      Show[T[F]] =
+    T.showT[F](F)
 }

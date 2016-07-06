@@ -17,7 +17,6 @@
 package quasar.qscript
 
 import quasar.Predef._
-import quasar.ejson.{Int => _, _}
 import quasar.fp._
 
 import matryoshka._
@@ -70,7 +69,7 @@ sealed abstract class QScriptCore[T[_[_]], A] {
     extends QScriptCore[T, A]
 
 object QScriptCore {
-  implicit def equal[T[_[_]]](implicit EqT: Equal[T[EJson]]): Delay[Equal, QScriptCore[T, ?]] =
+  implicit def equal[T[_[_]]: EqualT]: Delay[Equal, QScriptCore[T, ?]] =
     new Delay[Equal, QScriptCore[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
@@ -99,7 +98,7 @@ object QScriptCore {
         }
     }
 
-  implicit def show[T[_[_]]](implicit EJ: Show[T[EJson]]): Delay[Show, QScriptCore[T, ?]] =
+  implicit def show[T[_[_]]: ShowT]: Delay[Show, QScriptCore[T, ?]] =
     new Delay[Show, QScriptCore[T, ?]] {
       def apply[A](s: Show[A]): Show[QScriptCore[T, A]] =
         Show.show {

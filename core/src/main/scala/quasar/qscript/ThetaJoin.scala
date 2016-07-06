@@ -16,7 +16,6 @@
 
 package quasar.qscript
 
-import quasar.ejson.{Int => _, _}
 import quasar.Predef._
 import quasar.fp._
 
@@ -44,7 +43,7 @@ import scalaz._, Scalaz._
   combine: JoinFunc[T])
 
 object ThetaJoin {
-  implicit def equal[T[_[_]]](implicit eqTEj: Equal[T[EJson]]): Delay[Equal, ThetaJoin[T, ?]] =
+  implicit def equal[T[_[_]]: EqualT]: Delay[Equal, ThetaJoin[T, ?]] =
     new Delay[Equal, ThetaJoin[T, ?]] {
       def apply[A](eq: Equal[A]) =
         Equal.equal {
@@ -62,7 +61,7 @@ object ThetaJoin {
     }
 
 
-  implicit def show[T[_[_]]](implicit s: Show[T[EJson]]): Delay[Show, ThetaJoin[T, ?]] =
+  implicit def show[T[_[_]]: ShowT]: Delay[Show, ThetaJoin[T, ?]] =
     new Delay[Show, ThetaJoin[T, ?]] {
       def apply[A](showA: Show[A]): Show[ThetaJoin[T, A]] = Show.show {
         case ThetaJoin(src, lBr, rBr, on, f, combine) =>
