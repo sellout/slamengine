@@ -105,11 +105,12 @@ object SourcedPathable {
       })
     }
 
-  implicit def mergeable[T[_[_]]: Corecursive]:
+  implicit def mergeable[T[_[_]]: Corecursive](implicit shEj: Show[T[EJson]]):
       Mergeable.Aux[T, SourcedPathable[T, Unit]] =
     new Mergeable[SourcedPathable[T, Unit]] {
       type IT[F[_]] = T[F]
 
+      // TODO namegen
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
@@ -121,6 +122,14 @@ object SourcedPathable {
               Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit("tmp1")))
             val rf =
               Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit("tmp2")))
+
+            val x = scala.Predef.implicitly[Show[Free[MapFunc[IT, ?], Unit]]]
+            val x2 = scala.Predef.implicitly[Show[MapFunc[IT, Unit]]]
+            val x3 = scala.Predef.implicitly[Delay[Show, MapFunc[IT, ?]]]
+            val x4 = scala.Predef.implicitly[Show[Unit]]
+
+            scala.Predef.println(s"lf>>>> ${lf.show}")
+            scala.Predef.println(s"rf>>>> ${rf.show}")
 
             AbsMerge[IT, SourcedPathable[IT, Unit], FreeMap](Map((), Free.roll[MapFunc[IT, ?], Unit](
               ConcatMaps(

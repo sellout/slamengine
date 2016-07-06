@@ -42,14 +42,19 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
 
   val elide = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
 
+  def to[A](a: A, f: A => Unit): A = {
+    f(a)
+    a
+  }
+
   def callIt(lp: Fix[LP]): PlannerError \/ InnerPure =
-    lp.transCataM(lpToQScript).evalZero.map {
+    to[PlannerError \/ Inner](lp.transCataM(lpToQScript).evalZero, x => scala.Predef.println("initial QScript: \n" + x.show)).map {
       _.transCata(elide.purify)
       .transCata(
         liftFG(elideNopJoin[QScriptPure[Fix, ?]]) ⋙
+        liftFF(coalesceMaps[QScriptPure[Fix, ?]]) ⋙
         injectedNT[SourcedPathable[Fix, ?], QScriptPure[Fix, ?]](normalize).apply ⋙
-        liftFG(elideNopMap[QScriptPure[Fix, ?]]) ⋙
-        liftFF(coalesceMaps[QScriptPure[Fix, ?]]))
+        liftFG(elideNopMap[QScriptPure[Fix, ?]]))
     }
 
   val DeadEndPure = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]

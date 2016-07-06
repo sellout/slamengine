@@ -214,6 +214,8 @@ class Transform[T[_[_]]: Recursive: Corecursive](
     func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
       QSState[SourcedPathable[T, Inner]] = {
     val AbsMerge(merged, left, right) = merge(values(0), values(1))
+    // TODO show for FreeQS
+    scala.Predef.println(s">>>>>>>>>merge2Map \n ${merged.show} \n ${left} \n ${right}")
     makeBasicTheta(merged, left, right) map {
       case AbsMerge(src, mfl, mfr) =>
         Map(ThetaJoinInternal[T].inj(src).embed, Free.roll(func(mfl, mfr)))

@@ -565,4 +565,15 @@ package object fp
     def unapply[F[_], G[_], A](g: G[A])(implicit F: F :<: G): Option[F[A]] =
       F.prj(g)
   }
+  
+  @typeclass trait EqualT[T[_[_]]] {
+    def equal[F[_]](tf1: T[F], tf2: T[F])(implicit del: Delay[Equal, F]): Boolean
+    def equalT[T[_[_]]: EqualT, F[_]](delay: Delay[Equal, F]): Equal[T[F]] =
+      Equal.equal[T[F]] { case (a, b) => equal[F](a, b)(delay) }
+  }
+
+  implicit val equalTFix: EqualT[Fix] = new EqualT[Fix] {
+    def equal[F[_]](tf1: Fix[F], tf2: Fix[F])(implicit del: Delay[Equal, F]): Boolean =
+      del(equalT[Fix, F](del)).equal(tf1.unFix, tf2.unFix)
+  }
 }
