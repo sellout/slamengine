@@ -33,7 +33,7 @@ import matryoshka.patterns._
 import monocle.macros.Lenses
 import pathy.Path._
 import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._, IndexedStateT._
-import shapeless.{:: => _, Data => _, Coproduct => _, Const => _, _}
+import shapeless.{Fin, nat, Sized}
 
 // Need to keep track of our non-type-ensured guarantees:
 // - all conditions in a ThetaJoin will refer to both sides of the join
@@ -177,33 +177,30 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT] extends Helpers[
     case ConsF(head, (acc, l, r)) => (head :: acc, l, r)
   }
 
-  val zipper: ElgotCoalgebra[TriplePures \/ ?, ListF[QScriptInternal[T, Unit], ?], (DoubleFreeMap, DoublePures)] = {
-    case ((_, _), (Nil, Nil)) => (Nil, Nil, Nil).left
-    case ((_, _), (Nil, r))   => (Nil, Nil, r).left
-    case ((_, _), (l,   Nil)) => (Nil, l,   Nil).left
+  val zipper: ElgotCoalgebraM[TriplePures \/ ?, State[NameGen, ?], ListF[QScriptInternal[T, Unit], ?], (DoubleFreeMap, DoublePures)] = {
     case ((lm, rm), (l :: ls, r :: rs)) => {
       val ma = implicitly[Mergeable.Aux[T, QScriptInternal[T, Unit]]]
 
-      ma.mergeSrcs(lm, rm, l, r).fold[TriplePures \/ ListF[QScriptInternal[T, Unit], (DoubleFreeMap, DoublePures)]](
-        (Nil, l :: ls, r :: rs).left) {
-        case AbsMerge(inn, lmf, rmf) => ConsF(inn, ((lmf, rmf), (ls, rs))).right[TriplePures]
-      }
+      ma.mergeSrcs(lm, rm, l, r).fold[TriplePures \/ ListF[QScriptInternal[T, Unit], (DoubleFreeMap, DoublePures)]]({
+          case AbsMerge(inn, lmf, rmf) => ConsF(inn, ((lmf, rmf), (ls, rs))).right[TriplePures]
+        }, (Nil, l :: ls, r :: rs).left)
     }
+    case ((_, _), (l, r)) => (Nil, l, r).left.point[State[NameGen, ?]]
   }
 
-  def merge(left: Inner, right: Inner): MergeJoin[T, Inner] = {
+  def merge(left: Inner, right: Inner): State[NameGen, MergeJoin[T, Inner]] = {
     val lLin: Pures[Unit] = left.cata(linearize).reverse
     val rLin: Pures[Unit] = right.cata(linearize).reverse
 
-    val (common, lTail, rTail) =
-      ((UnitF[T], UnitF[T]), (lLin, rLin)).elgot(consZipped, zipper)
-
-    AbsMerge[T, Inner, FreeQS](
-      common.reverse.ana[T, QScriptInternal[T, ?]](delinearizeInner),
-      foldIso(CoEnv.freeIso[Unit, QScriptInternal[T, ?]])
-        .get(lTail.reverse.ana[T, CoEnv[Unit, QScriptInternal[T, ?], ?]](delinearizeFreeQS[QScriptInternal[T, ?], Unit] >>> (CoEnv(_)))),
-      foldIso(CoEnv.freeIso[Unit, QScriptInternal[T, ?]])
-        .get(rTail.reverse.ana[T, CoEnv[Unit, QScriptInternal[T, ?], ?]](delinearizeFreeQS[QScriptInternal[T, ?], Unit] >>> (CoEnv(_)))))
+    elgotM((UnitF[T], UnitF[T]), (lLin, rLin))(consZipped(_).point[State[NameGen, ?]], zipper) ∘ {
+      case (common, lTail, rTail) =>
+        AbsMerge[T, Inner, FreeQS](
+          common.reverse.ana[T, QScriptInternal[T, ?]](delinearizeInner),
+          foldIso(CoEnv.freeIso[Unit, QScriptInternal[T, ?]])
+            .get(lTail.reverse.ana[T, CoEnv[Unit, QScriptInternal[T, ?], ?]](delinearizeFreeQS[QScriptInternal[T, ?], Unit] >>> (CoEnv(_)))),
+          foldIso(CoEnv.freeIso[Unit, QScriptInternal[T, ?]])
+            .get(rTail.reverse.ana[T, CoEnv[Unit, QScriptInternal[T, ?], ?]](delinearizeFreeQS[QScriptInternal[T, ?], Unit] >>> (CoEnv(_)))))
+    }
   }
 
   def merge2Map(
