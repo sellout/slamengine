@@ -102,8 +102,7 @@ object MapFunc {
   // TODO: This could be split up as it is in LP, with each function containing
   //       its own normalization.
   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-  def normalize[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive: Corecursive, A](
-    implicit EJ: Equal[T2[EJson]]):
+  def normalize[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive: Corecursive: EqualT, A]:
       CoMFR[T, T2, A] => Option[CoMFR[T, T2, A]] =
     _.run.fold(
       κ(None),
@@ -463,7 +462,7 @@ object MapFuncs {
   object StrLit {
     def apply[T[_[_]]: Corecursive, A](str: String): Free[MapFunc[T, ?], A] =
       Free.roll(Nullary[T, Free[MapFunc[T, ?], A]](CommonEJson.inj(ejson.Str[T[EJson]](str)).embed))
-    
+
     def unapply[T[_[_]]: Recursive, A](mf: Free[MapFunc[T, ?], A]): Option[String] = mf.resume.fold ({
       case Nullary(ej) => CommonEJson.prj(ej.project).flatMap {
         case ejson.Str(str) => str.some

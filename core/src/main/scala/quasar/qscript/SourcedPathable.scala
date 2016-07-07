@@ -143,4 +143,16 @@ object SourcedPathable {
       def digForBucket: SourcedPathable[T, Inner] => StateT[QScriptBucket[T, Inner] \/ ?, Int, Inner] =
         sp => IndexedStateT.stateT(sp.src)
     }
+
+  implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
+      Normalizable[SourcedPathable[T, ?]] =
+    new Normalizable[SourcedPathable[T, ?]] {
+      def normalize = new (SourcedPathable[T, ?] ~> SourcedPathable[T, ?]) {
+        def apply[A](sp: SourcedPathable[T, A]) = sp match {
+          case Map(src, f)          => Map(src, normalizeMapFunc(f))
+          case LeftShift(src, s, r) => LeftShift(src, normalizeMapFunc(s), normalizeMapFunc(r))
+          case Union(src, l, r)     => Union(src, l.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize), r.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize))
+        }
+      }
+    }
 }

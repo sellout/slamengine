@@ -170,4 +170,28 @@ object QScriptCore {
         case qs => IndexedStateT.stateT(qs.src)
       }
     }
+
+  implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
+      Normalizable[QScriptCore[T, ?]] =
+    new Normalizable[QScriptCore[T, ?]] {
+      def normalize = new (QScriptCore[T, ?] ~> QScriptCore[T, ?]) {
+        def apply[A](qc: QScriptCore[T, A]) = qc match {
+          case Reduce(src, bucket, reducers, repair) =>
+            Reduce(src, normalizeMapFunc(bucket), reducers.map(_.map(normalizeMapFunc(_))), normalizeMapFunc(repair))
+          case Sort(src, bucket, order) =>
+            Sort(src, normalizeMapFunc(bucket), order.map(_.leftMap(normalizeMapFunc(_))))
+          case Filter(src, f) => Filter(src, normalizeMapFunc(f))
+          case Take(src, from, count) =>
+            Take(
+              src,
+              from.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
+              count.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize))
+          case Drop(src, from, count) =>
+            Drop(
+              src,
+              from.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
+              count.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize))
+        }
+      }
+    }
 }

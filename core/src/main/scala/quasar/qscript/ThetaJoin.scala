@@ -98,4 +98,19 @@ object ThetaJoin {
       def digForBucket: ThetaJoin[T, Inner] => StateT[QScriptBucket[IT, Inner] \/ ?, Int, Inner] =
         sp => IndexedStateT.stateT(sp.src)
     }
+
+  implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
+      Normalizable[ThetaJoin[T, ?]] =
+    new Normalizable[ThetaJoin[T, ?]] {
+      def normalize = new (ThetaJoin[T, ?] ~> ThetaJoin[T, ?]) {
+        def apply[A](tj: ThetaJoin[T, A]) =
+          ThetaJoin(
+            tj.src,
+            tj.lBranch.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
+            tj.rBranch.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
+            normalizeMapFunc(tj.on),
+            tj.f,
+            normalizeMapFunc(tj.combine))
+      }
+    }
 }

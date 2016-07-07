@@ -21,7 +21,6 @@ import quasar.Predef._
 import quasar.{LogicalPlan, Data, CompilerHelpers}
 import quasar.{LogicalPlan => LP}
 import quasar.fp._
-import quasar.fp.free._
 import quasar.fs._
 import quasar.qscript.MapFuncs._
 import quasar.std.StdLib._
@@ -38,7 +37,6 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   import transform._
 
   val optimize = new Optimize[Fix]
-  import optimize._
 
   val elide = implicitly[ElideBuckets.Aux[Fix, QScriptInternal[Fix, ?]]]
 
@@ -49,13 +47,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
 
   def callIt(lp: Fix[LP]): PlannerError \/ InnerPure =
     to[PlannerError \/ Inner](lp.transCataM(lpToQScript).evalZero, x => scala.Predef.println("initial QScript: \n" + x.show)).map {
-      _.transCata(elide.purify)
-      .transCata(
-        liftFG(elideNopJoin[QScriptPure[Fix, ?]]) ⋙
-        liftFF(coalesceMaps[QScriptPure[Fix, ?]]) ⋙
-        injectedNT[SourcedPathable[Fix, ?], QScriptPure[Fix, ?]](normalize).apply ⋙
-        liftFG(coalesceMapJoin[QScriptPure[Fix, ?]]) ⋙ // NB: move this before normalize, once we normalize ThetaJoins
-        liftFG(elideNopMap[QScriptPure[Fix, ?]]))
+      _.transCata(elide.purify ⋙ optimize.applyAll)
     }
 
   val DeadEndPure = implicitly[Const[DeadEnd, ?] :<: QScriptPure[Fix, ?]]

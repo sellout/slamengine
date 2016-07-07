@@ -714,21 +714,6 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     case x                          => SP.inj(x)
   }
 
-  def normalizeMapFunc[A]: Free[MapFunc[T, ?], A] => Free[MapFunc[T, ?], A] =
-    _.ana[Mu, CoEnv[A, MapFunc[T, ?], ?]](CoEnv.freeIso[A, MapFunc[T, ?]].reverseGet)
-      .transCata[CoMF[T, A, ?]](repeatedly(MapFunc.normalize))
-      .cata(CoEnv.freeIso[A, MapFunc[T, ?]].get)
-
-  // TODO: Make this a type class, extend it to other components.
-  def normalize: SourcedPathable[T, ?] ~> SourcedPathable[T, ?] =
-    new (SourcedPathable[T, ?] ~> SourcedPathable[T, ?]) {
-      def apply[A](sp: SourcedPathable[T, A]) = sp match {
-        case Map(src, f)          => Map(src, normalizeMapFunc(f))
-        case LeftShift(src, s, r) => LeftShift(src, normalizeMapFunc(s), normalizeMapFunc(r))
-        case x                    => x
-      }
-    }
-
   def elideNopJoin[F[_]](
     implicit Th: ThetaJoin[T, ?] :<: F, SP: SourcedPathable[T, ?] :<: F):
       ThetaJoin[T, T[F]] => F[T[F]] = {
@@ -755,7 +740,17 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     case x @ Map(Embed(src), mf) =>
       TJ.prj(src).fold(
         SP.inj(x))(
-        tj => TJ.inj(ThetaJoin.combine.modify((cf: JoinFunc[T]) => (mf.map(κ(cf))).join)(tj)))
+        tj => TJ.inj(ThetaJoin.combine.modify(mf >> (_: JoinFunc[T]))(tj)))
     case x => SP.inj(x)
   }
+
+  // TODO: Apply this to FreeQS structures.
+  def applyAll[F[_]: Functor](
+    implicit SP: SourcedPathable[T, ?] :<: F, TJ: ThetaJoin[T, ?] :<: F):
+      F[T[F]] => F[T[F]] =
+    liftFG(elideNopJoin[F]) ⋙
+    liftFF(coalesceMaps[F]) ⋙
+    liftFG(coalesceMapJoin[F]) ⋙
+    Normalizable[F].normalize ⋙
+    liftFG(elideNopMap[F])
 }
