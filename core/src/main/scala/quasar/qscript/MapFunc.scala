@@ -152,6 +152,8 @@ object MapFunc {
         case Null(a1) => f(a1) ∘ (Null(_))
         case ToString(a1) => f(a1) ∘ (ToString(_))
         case MakeArray(a1) => f(a1) ∘ (MakeArray(_))
+        case DupArrayIndices(a1) => f(a1) ∘ (DupArrayIndices(_))
+        case DupMapKeys(a1) => f(a1) ∘ (DupMapKeys(_))
 
         // binary
         case Extract(a1, a2) => (f(a1) ⊛ f(a2))(Extract(_, _))
@@ -197,7 +199,7 @@ object MapFunc {
         case (Nullary(v1), Nullary(v2)) => v1.equals(v2)
 
         // unary
-        case (Date(a1), Date(b1)) => in.equal(a1, b1) 
+        case (Date(a1), Date(b1)) => in.equal(a1, b1)
         case (Time(a1), Time(b1)) => in.equal(a1, b1)
         case (Timestamp(a1), Timestamp(b1)) => in.equal(a1, b1)
         case (Interval(a1), Interval(b1)) => in.equal(a1, b1)
@@ -214,6 +216,8 @@ object MapFunc {
         case (Null(a1), Null(b1)) => in.equal(a1, b1)
         case (ToString(a1), ToString(b1)) => in.equal(a1, b1)
         case (MakeArray(a1), MakeArray(b1)) => in.equal(a1, b1)
+        case (DupArrayIndices(a1), DupArrayIndices(b1)) => in.equal(a1, b1)
+        case (DupMapKeys(a1), DupMapKeys(b1)) => in.equal(a1, b1)
 
         case (Extract(a1, a2), Extract(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
         case (Add(a1, a2), Add(b1, b2)) => in.equal(a1, b1) && in.equal(a2, b2)
@@ -277,6 +281,8 @@ object MapFunc {
         case Null(a1) => Cord("Null(") ++ sh.show(a1) ++ Cord(")")
         case ToString(a1) => Cord("ToString(") ++ sh.show(a1) ++ Cord(")")
         case MakeArray(a1) => Cord("MakeArray(") ++ sh.show(a1) ++ Cord(")")
+        case DupArrayIndices(a1) => Cord("DupArrayIndices(") ++ sh.show(a1) ++ Cord(")")
+        case DupMapKeys(a1) => Cord("DupMapKeys(") ++ sh.show(a1) ++ Cord(")")
 
         // binary
         case Extract(a1, a2) => Cord("Extract(") ++ sh.show(a1) ++ Cord(", ") ++ sh.show(a2)  ++ Cord(")")
@@ -446,6 +452,8 @@ object MapFuncs {
   @Lenses final case class DeleteField[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   // helpers & QScript-specific
+  @Lenses final case class DupMapKeys[T[_[_]], A](a1: A) extends Unary[T, A]
+  @Lenses final case class DupArrayIndices[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class Range[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
 
   final case class Guard[T[_[_]], A](a1: A, pattern: Type, a2: A, a3: A)
@@ -477,3 +485,4 @@ object MapFuncs {
     }, _ => None)
   }
 }
+
