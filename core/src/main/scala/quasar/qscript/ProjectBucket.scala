@@ -20,6 +20,7 @@ import quasar.Predef._
 import quasar.fp._
 
 import matryoshka._
+import matryoshka.patterns._
 import monocle.macros.Lenses
 import scalaz._, Scalaz._
 
@@ -88,15 +89,15 @@ object ProjectBucket {
     }
 
   implicit def mergeable[T[_[_]]: Corecursive: EqualT]:
-      Mergeable.Aux[T, ProjectBucket[T, Unit]] =
-    new Mergeable[ProjectBucket[T, Unit]] {
+      Mergeable.Aux[T, ProjectBucket[T, ?]] =
+    new Mergeable[ProjectBucket[T, ?]] {
       type IT[F[_]] = T[F]
 
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
-        p1: ProjectBucket[IT, Unit],
-        p2: ProjectBucket[IT, Unit]) =
+        p1: EnvT[Ann[IT], ProjectBucket[IT, ?], Unit],
+        p2: EnvT[Ann[IT], ProjectBucket[IT, ?], Unit]) =
         OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
     }
 }

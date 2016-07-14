@@ -20,6 +20,7 @@ import quasar.Predef._
 import quasar.fp._
 
 import matryoshka._
+import matryoshka.patterns._
 import monocle.macros.Lenses
 import scalaz._, Scalaz._
 
@@ -95,15 +96,15 @@ object SourcedPathable {
     }
 
   implicit def mergeable[T[_[_]]: EqualT]:
-      Mergeable.Aux[T, SourcedPathable[T, Unit]] =
-    new Mergeable[SourcedPathable[T, Unit]] {
+      Mergeable.Aux[T, SourcedPathable[T, ?]] =
+    new Mergeable[SourcedPathable[T, ?]] {
       type IT[F[_]] = T[F]
 
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
-        p1: SourcedPathable[IT, Unit],
-        p2: SourcedPathable[IT, Unit]) =
+        p1: EnvT[Ann, SourcedPathable[IT, ?], Unit],
+        p2: EnvT[Ann, SourcedPathable[IT, ?], Unit]) =
         OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
     }
 

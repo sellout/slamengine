@@ -138,45 +138,45 @@ object QScriptCore {
     }
 
   implicit def mergeable[T[_[_]]: Corecursive: EqualT]:
-      Mergeable.Aux[T, QScriptCore[T, Unit]] =
-    new Mergeable[QScriptCore[T, Unit]] {
+      Mergeable.Aux[T, QScriptCore[T, ?]] =
+    new Mergeable[QScriptCore[T, ?]] {
       type IT[F[_]] = T[F]
 
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
-        p1: QScriptCore[IT, Unit],
-        p2: QScriptCore[IT, Unit]) =
-        OptionT((p1, p2) match {
-          case (Map(_, m1), Map(_, m2)) => for {
-            lname <- freshName("leftMap")
-            rname <- freshName("rightMap")
-          } yield {
-            val lf = Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit(lname)))
-            val rf = Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit(rname)))
+        p1: EnvT[Ann, QScriptCore[IT, ?], Unit],
+        p2: EnvT[Ann, QScriptCore[IT, ?], Unit]) = ???
+        // OptionT((p1, p2) match {
+        //   case (Map(_, m1), Map(_, m2)) => for {
+        //     lname <- freshName("leftMap")
+        //     rname <- freshName("rightMap")
+        //   } yield {
+        //     val lf = Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit(lname)))
+        //     val rf = Free.roll[MapFunc[IT, ?], Unit](ProjectField(UnitF[IT], StrLit(rname)))
 
-            SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](Map((), Free.roll[MapFunc[IT, ?], Unit](
-              ConcatMaps(
-                Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit(lname), rebase(m1, left))),
-                Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit(rname), rebase(m2, right)))))),
-              lf, rf).some
-          }
-          case (t1, t2) if t1 ≟ t2 =>
-            state(SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](t1, UnitF, UnitF).some)
-          case (Reduce(_, bucket1, func1, rep1), Reduce(_, bucket2, func2, rep2)) => {
-            val mapL = rebase(bucket1, left)
-            val mapR = rebase(bucket2, right)
+        //     SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](Map((), Free.roll[MapFunc[IT, ?], Unit](
+        //       ConcatMaps(
+        //         Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit(lname), rebase(m1, left))),
+        //         Free.roll[MapFunc[IT, ?], Unit](MakeMap(StrLit(rname), rebase(m2, right)))))),
+        //       lf, rf).some
+        //   }
+        //   case (t1, t2) if t1 ≟ t2 =>
+        //     state(SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](t1, UnitF, UnitF).some)
+        //   case (Reduce(_, bucket1, func1, rep1), Reduce(_, bucket2, func2, rep2)) => {
+        //     val mapL = rebase(bucket1, left)
+        //     val mapR = rebase(bucket2, right)
 
-            state((mapL ≟ mapR).option(
-              SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](
-                Reduce((), mapL, func1 // ++ func2 // TODO: append Sizeds
-                  , rep1),
-                UnitF,
-                UnitF)))
-          }
-          case (_, _) =>
-            state((p1 ≟ p2).option(SrcMerge(p1, left, right)))
-        })
+        //     state((mapL ≟ mapR).option(
+        //       SrcMerge[QScriptCore[IT, Unit], FreeMap[IT]](
+        //         Reduce((), mapL, func1 // ++ func2 // TODO: append Sizeds
+        //           , rep1),
+        //         UnitF,
+        //         UnitF)))
+        //   }
+        //   case (_, _) =>
+        //     state((p1 ≟ p2).option(SrcMerge(p1, left, right)))
+        // })
     }
 
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:

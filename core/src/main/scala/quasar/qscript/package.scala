@@ -83,6 +83,9 @@ package object qscript {
 
   type QSState[A] = StateT[PlannerError \/ ?, NameGen, A]
 
+  case class Ann[T[_[_]]](provenance: List[FreeMap[T]], values: FreeMap[T])
+  def EmptyAnn[T[_[_]]]: Ann[T] = Ann[T](Nil, UnitF[T])
+
   def UnitF[T[_[_]]] = ().point[Free[MapFunc[T, ?], ?]]
 
   final case class SrcMerge[A, B](src: A, left: B, right: B)

@@ -75,15 +75,15 @@ object ThetaJoin {
       }
     }
 
-  implicit def mergeable[T[_[_]]: EqualT]: Mergeable.Aux[T, ThetaJoin[T, Unit]] =
-    new Mergeable[ThetaJoin[T, Unit]] {
+  implicit def mergeable[T[_[_]]: EqualT]: Mergeable.Aux[T, ThetaJoin[T, ?]] =
+    new Mergeable[ThetaJoin[T, ?]] {
       type IT[F[_]] = T[F]
 
       def mergeSrcs(
         left: FreeMap[IT],
         right: FreeMap[IT],
-        p1: ThetaJoin[IT, Unit],
-        p2: ThetaJoin[IT, Unit]) =
+        p1: EnvT[Ann, ThetaJoin[IT, ?], Unit],
+        p2: EnvT[Ann, ThetaJoin[IT, ?], Unit]) =
         OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
     }
 
@@ -102,3 +102,4 @@ object ThetaJoin {
       }
     }
 }
+
