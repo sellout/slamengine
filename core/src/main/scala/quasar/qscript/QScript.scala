@@ -227,9 +227,15 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     }
   }
 
+  // [1, 2, 3] => [{key: 0, value: 1}, ...]
+  // {a: 1, b: 2, c: 3}` => `{a: {key: a, value: 1}, b: {key: b, value: 2}, c: {key: c, value: 3}}`
+  def bucketNest(keyName: String, valueName: String): MapFunc[T, FreeMap[T]] = ???
+
   // NB: More compilicated LeftShifts are generated as an optimization:
   // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
   // after: LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
+  //
+  // TODO namegen
   def invokeExpansion1(
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
@@ -242,17 +248,24 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, x:foo) - 1
       //   id(p, x:bar) - 2
       // (one bucket)
-      case structural.FlattenMap =>
-        SP.inj(LeftShift(
-          values(0),
-          UnitF,
-          Free.point(RightSide)))
+      case structural.FlattenMap | structural.FlattenArray =>
+        val EnvT((Ann(provs, vals), src)): EnvT[Ann, F, T[Target]] =
+          values(0).project
 
-      case structural.FlattenArray =>
-        SP.inj(LeftShift(
-          values(0),
-          UnitF,
-          Free.point(RightSide)))
+        val getVals: FreeMap[T] =
+          Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("value")))
+
+        val wrappedSrc: F[T[Target]] =
+          QC.inj(Map(EnvT((EmptyAnn, src)).embed, Free.roll(bucketNest("key", "value"))))
+
+        EnvT[Ann, F, T[Target]]((
+          Ann(
+            Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("key"))) :: provs,
+            vals >> getVals),
+          SP.inj(LeftShift(
+            EnvT[Ann, F, T[Target]]((EmptyAnn, wrappedSrc)).embed,
+            getVals,
+            Free.point(RightSide)))))
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
