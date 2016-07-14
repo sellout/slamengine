@@ -87,13 +87,6 @@ object ThetaJoin {
         OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
     }
 
-  implicit def diggable[T[_[_]]]: Diggable.Aux[T, ThetaJoin[T, ?]] =
-    new Diggable[ThetaJoin[T, ?]] {
-      type IT[G[_]] = T[G]
-
-      def digForBucket[G[_]](tj: ThetaJoin[T, IT[G]]) = IndexedStateT.stateT(tj)
-    }
-
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
       Normalizable[ThetaJoin[T, ?]] =
     new Normalizable[ThetaJoin[T, ?]] {
@@ -101,8 +94,8 @@ object ThetaJoin {
         def apply[A](tj: ThetaJoin[T, A]) =
           ThetaJoin(
             tj.src,
-            tj.lBranch.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
-            tj.rBranch.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
+            tj.lBranch.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
+            tj.rBranch.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
             normalizeMapFunc(tj.on),
             tj.f,
             normalizeMapFunc(tj.combine))

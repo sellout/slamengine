@@ -179,20 +179,6 @@ object QScriptCore {
         })
     }
 
-  implicit def diggable[T[_[_]]: Corecursive]:
-      Diggable.Aux[T, QScriptCore[T, ?]] =
-    new Diggable[QScriptCore[T, ?]] {
-      type IT[G[_]] = T[G]
-
-      def digForBucket[G[_]](fg: QScriptCore[T, IT[G]]) =
-        fg match {
-          case Reduce(_, _, _, _)
-             | Sort(_, _, _) =>
-            StateT(s => (s + 1, fg).right)
-          case _ => IndexedStateT.stateT(fg)
-      }
-    }
-
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
       Normalizable[QScriptCore[T, ?]] =
     new Normalizable[QScriptCore[T, ?]] {
@@ -207,13 +193,13 @@ object QScriptCore {
           case Take(src, from, count) =>
             Take(
               src,
-              from.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
-              count.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize))
+              from.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
+              count.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize))
           case Drop(src, from, count) =>
             Drop(
               src,
-              from.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize),
-              count.mapSuspension(Normalizable[QScriptInternal[T, ?]].normalize))
+              from.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
+              count.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize))
         }
       }
     }
