@@ -324,16 +324,17 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   def invokeReduction1(
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
-      State[NameGen, Target[T[Target]]] = {
+      Target[T[Target]] = {
+    val EnvT((Ann(provs, reduce), src)): EnvT[Ann, F, T[Target]] =
+      values(0).project
 
-    findBucket(values(0)) map {
-      case (src, bucket, reduce) =>
-        Reduce[T, T[Target], nat._0](
-          src,
-          bucket,
-          Sized[List](ReduceFunc.translateReduction[FreeMap[T]](func)(reduce)),
-          Free.point(Fin[nat._0, nat._1]))
-    }
+    EnvT[Ann, F, T[Target]]((
+      Ann(provs.tail, reduce), // TODO drop last prov, new reduce
+      QC.inj(Reduce[T, T[Target], nat._0](
+        EnvT((EmptyAnn, src)).embed,
+        provs.tail.foldLeft(UnitF[T]) { case (acc, p) => acc >> p },
+        Sized[List](ReduceFunc.translateReduction[FreeMap[T]](func)(reduce)),
+        Free.point(Fin[nat._0, nat._1])))))
   }
 
   // TODO: This should definitely be in Matryoshka.
