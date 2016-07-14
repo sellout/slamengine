@@ -231,11 +231,30 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   // {a: 1, b: 2, c: 3}` => `{a: {key: a, value: 1}, b: {key: b, value: 2}, c: {key: c, value: 3}}`
   def bucketNest(keyName: String, valueName: String): MapFunc[T, FreeMap[T]] = ???
 
+  // TODO namegen
+  def flatten(input: T[Target]): Target[T[Target]] = {
+    val EnvT((Ann(provs, vals), src)): EnvT[Ann, F, T[Target]] =
+      input.project
+
+    val getVals: FreeMap[T] =
+      Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("value")))
+
+    val wrappedSrc: F[T[Target]] =
+      QC.inj(Map(EnvT((EmptyAnn, src)).embed, Free.roll(bucketNest("key", "value"))))
+
+    EnvT[Ann, F, T[Target]]((
+      Ann(
+        Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("key"))) :: provs,
+        vals >> getVals),
+      SP.inj(LeftShift(
+        EnvT[Ann, F, T[Target]]((EmptyAnn, wrappedSrc)).embed,
+        getVals,
+        Free.point(RightSide)))))
+  }
+
   // NB: More compilicated LeftShifts are generated as an optimization:
   // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
   // after: LeftShift(cs, struct, comb.flatMap(LeftSide => mf.map(_ => LeftSide), RS => repair))
-  //
-  // TODO namegen
   def invokeExpansion1(
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
@@ -249,23 +268,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, x:bar) - 2
       // (one bucket)
       case structural.FlattenMap | structural.FlattenArray =>
-        val EnvT((Ann(provs, vals), src)): EnvT[Ann, F, T[Target]] =
-          values(0).project
-
-        val getVals: FreeMap[T] =
-          Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("value")))
-
-        val wrappedSrc: F[T[Target]] =
-          QC.inj(Map(EnvT((EmptyAnn, src)).embed, Free.roll(bucketNest("key", "value"))))
-
-        EnvT[Ann, F, T[Target]]((
-          Ann(
-            Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("key"))) :: provs,
-            vals >> getVals),
-          SP.inj(LeftShift(
-            EnvT[Ann, F, T[Target]]((EmptyAnn, wrappedSrc)).embed,
-            getVals,
-            Free.point(RightSide)))))
+        flatten(values(0)) // TODO
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -274,16 +277,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y:foo) - foo
       //   id(p, y:bar) - bar
       // (one bucket)
-      case structural.FlattenMapKeys =>
-        SP.inj(LeftShift(
-          values(0),
-          Free.roll(DupMapKeys(UnitF)),
-          Free.point(RightSide)))
-      case structural.FlattenArrayIndices =>
-        SP.inj(LeftShift(
-          values(0),
-          Free.roll(DupArrayIndices(UnitF)),
-          Free.point(RightSide)))
+      case structural.FlattenMapKeys | structural.FlattenArrayIndices =>
+        flatten(values(0)) // TODO
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -292,18 +287,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y, foo) - 1
       //   id(p, y, bar) - 2
       // (two buckets)
-      case structural.ShiftMap =>
-        QB.inj(LeftShiftBucket(
-          values(0),
-          UnitF,
-          Free.point(RightSide),
-          Free.roll(DupMapKeys(UnitF)))) // affects bucketing metadata
-      case structural.ShiftArray =>
-        QB.inj(LeftShiftBucket(
-          values(0),
-          UnitF,
-          Free.point(RightSide),
-          Free.roll(DupArrayIndices(UnitF)))) // affects bucketing metadata
+      case structural.ShiftMap | structural.ShiftArray =>
+        flatten(values(0)) // TODO
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -312,18 +297,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y, foo) - foo
       //   id(p, y, bar) - bar
       // (two buckets)
-      case structural.ShiftMapKeys =>
-        QB.inj(LeftShiftBucket(
-          values(0),
-          Free.roll(DupMapKeys(UnitF)),
-          Free.point(RightSide),
-          UnitF)) // affects bucketing metadata
-      case structural.ShiftArrayIndices =>
-        QB.inj(LeftShiftBucket(
-          values(0),
-          Free.roll(DupArrayIndices(UnitF)),
-          Free.point(RightSide),
-          UnitF)) // affects bucketing metadata
+      case structural.ShiftMapKeys | structural.ShiftArrayIndices =>
+        flatten(values(0)) // TODO
     }
 
   def invokeExpansion2(
