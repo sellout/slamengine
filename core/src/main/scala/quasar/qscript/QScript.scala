@@ -349,37 +349,25 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     f(t).fold(ι, FunctorT[T].map(_)(_.map(transApoT(_)(f))))
 
   def invokeThetaJoin(
-    input: Func.Input[T[Target], nat._3],
+    values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
-      State[NameGen, Target[T[Target]]] =
-    for {
-      tup0 <- merge(input(0), input(1)).mapK(_.right[PlannerError])
-      SrcMerge(src1, jbLeft, jbRight) = tup0
-      tup1 <- merge(src1, input(2)).mapK(_.right[PlannerError])
-    } yield {
-      val SrcMerge(src2, bothSides, cond) = tup1
+      State[NameGen, Target[T[Target]]] = {
+    val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
+    ???
 
-      val leftBr = rebase(bothSides, jbLeft)
-      val rightBr = rebase(bothSides, jbRight)
+    //val in0: QScriptProject[T, Unit] = QC.inj(Map((), UnitF[T]))
+    //val in: FreeQS[T] = Free.roll(in0)
 
-      val onQS =
-        transApoT[Free[?[_], JoinSide], F](transApoT[Free[?[_], JoinSide], F](cond.map[JoinSide](κ(RightSide)))(
-          substitute[Free[?[_], JoinSide], F](jbLeft.map[JoinSide](κ(RightSide)), Free.point(LeftSide))))(
-          substitute[Free[?[_], JoinSide], F](jbRight.map[JoinSide](κ(RightSide)), Free.point(RightSide)))
-
-      val on: JoinFunc[T] = equiJF // TODO get from onQS to here somehow
-
-      // TODO namegen
-      ThetaJoin(
-        src2,
-        leftBr.mapSuspension(FI),
-        rightBr.mapSuspension(FI),
-        on,
-        Inner,
-        Free.roll(ConcatMaps(
-          Free.roll(MakeMap(StrLit("left"), Free.point(LeftSide))),
-          Free.roll(MakeMap(StrLit("right"), Free.point(RightSide))))))
-    }
+    //ThetaJoin[T, F[T[Target]]](
+    //  src,
+    //  in,
+    //  Free.roll(QC.inj(Map((), rBranch))),
+    //  cond,
+    //  tpe,
+    //  Free.roll(ConcatMaps(
+    //    Free.roll(MakeMap(StrLit("left"), Free.point(LeftSide))),
+    //    Free.roll(MakeMap(StrLit("right"), Free.point(RightSide))))))
+  }
 
   def ProjectTarget(prefix: Target[T[Target]], field: FreeMap[T]) = {
     val Ann(provenance, values) = prefix.ask
@@ -441,28 +429,31 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     //  }
 
     case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
-      merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _))
-        .map(QC.inj)
+      merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect ≟ Mapping =>
-      stateT(QC.inj(
-        Map(a1, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF)))))
+      val EnvT((ann, src)): EnvT[Ann, F, T[Target]] =
+        a1.project
+      
+      stateT(EnvT((
+        ann,
+        QC.inj(Map(
+          EnvT((EmptyAnn, src)).embed,
+          Free.roll(MapFunc.translateUnaryMapping(func)(UnitF)))))))
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
-      merge2Map(Func.Input(a1, a2))(BucketField(_, _))
+      merge2Map(Func.Input2(a1, a2))(BucketField(_, _)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(structural.ArrayProject, Sized(a1, a2)) =>
-      merge2Map(Func.Input(a1, a2))(BucketIndex(_, _))
+      merge2Map(Func.Input2(a1, a2))(BucketIndex(_, _)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Mapping =>
-      merge2Map(Func.Input2(a1, a2))(MapFunc.translateBinaryMapping(func))
-        .map(QC.inj)
+      merge2Map(Func.Input2(a1, a2))(MapFunc.translateBinaryMapping(func)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Mapping =>
-      merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func))
-        .map(QC.inj)
+      merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Reduction =>
