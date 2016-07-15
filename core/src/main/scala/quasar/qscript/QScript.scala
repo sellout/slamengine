@@ -135,7 +135,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       ZipperAcc(Nil, sides, tails).left.point[State[NameGen, ?]]
   }
 
-  def merge(left: T[Target], right: T[Target]): State[NameGen, SrcMerge[T[Target], Free[Target, Unit]]] = {
+  type MergeComponent = (FreeMap[T], Ann[T], FreeQS[T])
+  type MergeResult = (T[Target], MergeComponent, MergeComponent)
+
+  def merge(left: T[Target], right: T[Target]): State[NameGen, MergeResult] = {
     val lLin: Envs = left.cata(linearizeEnv).reverse
     val rLin: Envs = right.cata(linearizeEnv).reverse
 
@@ -143,19 +146,37 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       ZipperSides(UnitF[T], UnitF[T]),
       ZipperTails(lLin, rLin)))(
       consZipped(_: ListF[Target[Unit], ZipperAcc]).point[State[NameGen, ?]], zipper) ∘ {
-      case ZipperAcc(common, ZipperSides(lMap, rMap), ZipperTails(lTail, rTail)) =>
-        val leftRev =
-          foldIso(CoEnv.freeIso[Unit, Target])
-            .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_))))
+        case ZipperAcc(common, ZipperSides(lMap, rMap), ZipperTails(lTail, rTail)) =>
+          val leftF: Free[F, Unit] =
+            foldIso(CoEnv.freeIso[Unit, Target])
+              .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
+                new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
+              }
 
-        val rightRev =
-          foldIso(CoEnv.freeIso[Unit, Target])
-            .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_))))
+          val rightF: Free[F, Unit] =
+            foldIso(CoEnv.freeIso[Unit, Target])
+              .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
+                new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
+              }
 
-        SrcMerge[T[Target], FreeUnit[Target]](
-          common.reverse.ana[T, Target](delinearizeInner),
-          rebase(leftRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], lMap)))))),
-          rebase(rightRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], rMap)))))))
+          val commonSrc: T[Target] = 
+            common.reverse.ana[T, Target](delinearizeInner)
+
+          // TODO totally wrong!!!!!!!!!!!!!
+          val leftAccess: MergeComponent = (
+            UnitF[T],
+            EmptyAnn[T],
+            leftF.mapSuspension(FI))
+
+          val rightAccess: MergeComponent = (
+            UnitF[T],
+            EmptyAnn[T],
+            rightF.mapSuspension(FI))
+
+          (commonSrc, leftAccess, rightAccess) 
+
+            //rebase(leftRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], lMap)))))),
+            //rebase(rightRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], rMap)))))))
     }
   }
 
