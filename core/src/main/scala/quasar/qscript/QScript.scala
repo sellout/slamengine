@@ -72,6 +72,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
 
   type Target[A] = EnvT[Ann[T], F, A]
   type TargetT = Target[T[Target]]
+  type FreeEnv = Free[Target, Unit]
 
   def DeadEndTarget(deadEnd: DeadEnd): TargetT =
     EnvT[Ann[T], F, T[Target]]((EmptyAnn[T], DE.inj(Const[DeadEnd, T[Target]](deadEnd))))
@@ -117,8 +118,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     case NilF() => ZipperAcc(Nil, ZipperSides(UnitF[T], UnitF[T]), ZipperTails(Nil, Nil))
     case ConsF(head, ZipperAcc(acc, sides, tails)) => ZipperAcc(head :: acc, sides, tails)
   }
-
-  type FreeEnv = Free[Target, Unit]
 
   // E, M, F, A => A => M[E[F[A]]]
   val zipper: ElgotCoalgebraM[
@@ -199,14 +198,13 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   def merge2Map(
     values: Func.Input[T[Target], nat._2])(
     func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
-      State[NameGen, Target[T[Target]]] = {
+      State[NameGen, TargetT] = {
     val (src, buckets, lval, rval) = autojoin(values(0), values(1))
     val (bucks, newBucks) = concatBuckets(buckets)
     concat(bucks, func(lval, rval).embed) ∘ {
       case (merged, b, v) =>
         EnvT((
           Ann[T](newBucks.map(_ >> b), v),
-          // NB: Does it matter what annotation we add to `src` here?
           QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
     }
   }
@@ -222,7 +220,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       case (merged, b, v) =>
         EnvT((
           Ann[T](newBucks.map(_ >> b), v),
-          // NB: Does it matter what annotation we add to `src` here?
           QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
     }
   }
@@ -368,17 +365,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           Free.roll(MakeArray(Free.point(Fin[nat._1, nat._2])))))))))
   }
 
-  // TODO: This should definitely be in Matryoshka.
-  // apomorphism - short circuit by returning left
-  def substitute[T[_[_]], F[_]](original: T[F], replacement: T[F])(implicit T: Equal[T[F]]):
-      T[F] => T[F] \/ T[F] =
-   tf => if (tf ≟ original) replacement.left else original.right
-
-  // TODO: This should definitely be in Matryoshka.
-  def transApoT[T[_[_]]: FunctorT, F[_]: Functor](t: T[F])(f: T[F] => T[F] \/ T[F]):
-      T[F] =
-    f(t).fold(ι, FunctorT[T].map(_)(_.map(transApoT(_)(f))))
-
   def invokeThetaJoin(
     values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
@@ -406,12 +392,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         concatted))))
   }
 
-  def ProjectTarget(prefix: Target[T[Target]], field: FreeMap[T]) = {
+  def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
     val Ann(provenance, values) = prefix.ask
     EnvT[Ann[T], F, T[Target]]((
-      Ann[T](Free.roll(ConcatArrays[T, FreeMap[T]](
-        Free.roll(MakeArray[T, FreeMap[T]](UnitF[T])),
-        Free.roll(MakeArray[T, FreeMap[T]](field)))) :: provenance, values),
+      Ann[T](prov.projectField(field) :: provenance, values),
       PB.inj(BucketField(prefix.embed, UnitF[T], field))))
   }
 
@@ -443,6 +427,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           ι)))))
       stateT(EnvT((EmptyAnn[T], res)))
 
+    // TODO remove these nodes from LP before they reach us by inline all free vars
     //case LogicalPlan.FreeF(name) =>
     //  val res = QC.inj(Map(
     //    EmptyTarget.embed,
@@ -479,10 +464,16 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
             QC.inj(Map(a1, mf))))}).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
-      merge2Map(Func.Input2(a1, a2))(BucketField(_, _)).mapK(_.right[PlannerError])
+      val (src, buckets, lval, rval) = autojoin(a1, a2)
+      stateT(EnvT((
+        Ann[T](buckets, UnitF[T]),
+        PB.inj(BucketField(EnvT((EmptyAnn[T], src)).embed, lval, rval)))))
 
     case LogicalPlan.InvokeFUnapply(structural.ArrayProject, Sized(a1, a2)) =>
-      merge2Map(Func.Input2(a1, a2))(BucketIndex(_, _)).mapK(_.right[PlannerError])
+      val (src, buckets, lval, rval) = autojoin(a1, a2)
+      stateT(EnvT((
+        Ann[T](buckets, UnitF[T]),
+        PB.inj(BucketIndex(EnvT((EmptyAnn[T], src)).embed, lval, rval)))))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Mapping =>

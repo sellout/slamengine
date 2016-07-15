@@ -43,11 +43,13 @@ class Provenance[T[_[_]]: Corecursive] {
   def shiftArray[A](mf: Free[MapFunc[T, ?], A]) = tagIdentity("a", mf)
   def unionLeft[A](mf: Free[MapFunc[T, ?], A]) = tagIdentity("l", mf)
   def unionRight[A](mf: Free[MapFunc[T, ?], A]) = tagIdentity("r", mf)
+
   def join[A](left: Free[MapFunc[T, ?], A], right: Free[MapFunc[T, ?], A]) =
     tagIdentity("j",
       Free.roll(ConcatArrays(
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](left)),
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](right)))))
+
   def nest[A](car: Free[MapFunc[T, ?], A], cadr: Free[MapFunc[T, ?], A]) =
     tagIdentity("n",
       Free.roll(ConcatArrays(
