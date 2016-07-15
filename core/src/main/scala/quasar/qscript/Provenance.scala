@@ -25,7 +25,8 @@ import scalaz._, Scalaz._
 
 // NB: Should we use char lits instead?
 class Provenance[T[_[_]]: Corecursive] {
-  private def tagIdentity[A](tag: String, mf: Free[MapFunc[T, ?], A]) =
+  private def tagIdentity[A](tag: String, mf: Free[MapFunc[T, ?], A]):
+      Free[MapFunc[T, ?], A] =
     Free.roll(MakeMap[T, Free[MapFunc[T, ?], A]](StrLit(tag), mf))
 
   // provenances:
@@ -56,7 +57,6 @@ class Provenance[T[_[_]]: Corecursive] {
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](car)),
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](cadr)))))
 
-
   def joinProvenances(leftBuckets: List[FreeMap[T]], rightBuckets: List[FreeMap[T]]):
       List[JoinFunc[T]] =
     leftBuckets.alignWith(rightBuckets) {
@@ -72,7 +72,6 @@ class Provenance[T[_[_]]: Corecursive] {
       case \&/.This(l)    => (l, NullLit[T, Unit]())
       case \&/.That(r)    => (NullLit[T, Unit](), r)
     }.map(_.bimap(unionLeft[Unit], unionRight[Unit])).unzip
-
 
   def nestProvenances(buckets: List[FreeMap[T]]): List[FreeMap[T]] =
     buckets match {
