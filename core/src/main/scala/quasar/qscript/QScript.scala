@@ -68,6 +68,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
            eq:         Delay[Equal, F])
     extends Helpers[T] {
 
+  val prov = new Provenance[T]
+
   type Target[A] = EnvT[Ann[T], F, A]
   type TargetT = Target[T[Target]]
 
@@ -561,17 +563,19 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       })
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect ≟ Squashing =>
-      stateT(func match {
-        case identity.Squash => QB.inj(SquashBucket(a1))
-      })
+      val Ann(buckets, value) = a1.project.ask
+      val (buck, newBuckets) = concatBuckets(prov.squashProvenances(buckets))
+      (concat(buck, value) ∘ { case (mf, buckAccess, valAccess) =>
+        EnvT((
+          Ann(newBuckets.map(_ >> buckAccess), valAccess),
+          QC.inj(Map(a1, mf))))
+      }).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect ≟ Expansion =>
       stateT(invokeExpansion1(func, Func.Input1(a1)))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect ≟ Expansion =>
-      invokeExpansion2(func, Func.Input2(a1, a2)) map {
-        SP.inj(_)
-      }
+      invokeExpansion2(func, Func.Input2(a1, a2)).map(SP.inj)
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2)) if func.effect ≟ Transformation =>
       func match {
