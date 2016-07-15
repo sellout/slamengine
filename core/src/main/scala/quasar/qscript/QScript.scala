@@ -208,90 +208,77 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           IntLit[T, Unit](p._2)))))
 
   def concat[A](l: Free[MapFunc[T, ?], A], r: Free[MapFunc[T, ?], A]):
-      State[NameGen, (Free[MapFunc[T, ?], A], Free[MapFunc[T, ?], Unit], Free[MapFunc[T, ?], Unit])] =
-    (freshName("lc") ⊛ freshName("rc"))((lname, rname) =>
-      (Free.roll(ConcatMaps(
-        Free.roll(MakeMap(StrLit[T, A](lname), l)),
-        Free.roll(MakeMap(StrLit[T, A](rname), r)))),
-        Free.roll(ProjectField(UnitF[T], StrLit[T, Unit](lname))),
-        Free.roll(ProjectField(UnitF[T], StrLit[T, Unit](rname)))))
+      (Free[MapFunc[T, ?], A], FreeMap[T], FreeMap[T]) =
+    (Free.roll(ConcatArrays(Free.roll(MakeArray(l)), Free.roll(MakeArray(r)))),
+      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0))),
+      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1))))
 
   def merge2Map(
     values: Func.Input[T[Target], nat._2])(
     func: (FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
-      State[NameGen, TargetT] = {
+      TargetT = {
     val (src, buckets, lval, rval) = autojoin(values(0), values(1))
     val (bucks, newBucks) = concatBuckets(buckets)
-    concat(bucks, func(lval, rval).embed) ∘ {
-      case (merged, b, v) =>
-        EnvT((
-          Ann[T](newBucks.map(_ >> b), v),
-          QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
-    }
+    val (merged, b, v) = concat(bucks, func(lval, rval).embed)
+
+    EnvT((
+      Ann[T](newBucks.map(_ >> b), v),
+      QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
   }
 
   // TODO unify with `merge2Map`
   def merge3Map(
     values: Func.Input[T[Target], nat._3])(
     func: (FreeMap[T], FreeMap[T], FreeMap[T]) => MapFunc[T, FreeMap[T]]):
-      State[NameGen, Target[T[Target]]] = {
+      Target[T[Target]] = {
     val (src, buckets, lval, cval, rval) = autojoin3(values(0), values(1), values(2))
     val (bucks, newBucks) = concatBuckets(buckets)
-    concat(bucks, func(lval, cval, rval).embed) ∘ {
-      case (merged, b, v) =>
-        EnvT((
-          Ann[T](newBucks.map(_ >> b), v),
-          QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
-    }
+    val (merged, b, v) = concat(bucks, func(lval, cval, rval).embed)
+
+    EnvT((
+      Ann[T](newBucks.map(_ >> b), v),
+      QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))))
   }
 
-  // [1, 2, 3] => [{key: 0, value: 1}, ...]
-  // {a: 1, b: 2, c: 3}` => `{a: {key: a, value: 1}, b: {key: b, value: 2}, c: {key: c, value: 3}}`
-  def bucketNest(keyName: String, valueName: String): MapFunc[T, FreeMap[T]] = ???
+  def shiftValues(input: T[Target], f: FreeMap[T] => MapFunc[T, FreeMap[T]]):
+      Target[T[Target]] = {
+    val Ann(provs, value) = input.project.ask
 
-  // TODO namegen
-  def shift(input: T[Target]): Target[T[Target]] = ??? // {
-  //   val EnvT((Ann[T](provs, vals), src)): Target[T[Target]] =
-  //     input.project
+    val (buck, newBucks) = concatBuckets(provs)
+    val (shiftedBuck, shiftAccess, buckAccess) =
+      concat(Free.roll(f(value)), buck)
+    val (merged, fullBuckAccess, valAccess) = concat(shiftedBuck, value)
 
-  //   val (buck, newBucks) = concatBuckets(provs)
-  //   val (merged, buckAccess, valAccess) = concat(buck, vals)
+    EnvT((
+      Ann(
+        prov.shiftMap(shiftAccess >> fullBuckAccess) ::
+          newBucks.map(_ >> buckAccess >> fullBuckAccess),
+        UnitF),
+      SP.inj(LeftShift(
+        EnvT((EmptyAnn[T], QC.inj(Map(input, merged)))).embed,
+        valAccess,
+        Free.point(RightSide)))))
+  }
 
-  //   val wrappedSrc: F[T[Target]] =
-  //     QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, merged))
+  def shiftIds(input: T[Target], f: FreeMap[T] => MapFunc[T, FreeMap[T]]):
+      Target[T[Target]] = {
+    val Ann(provs, value) = input.project.ask
 
-  //   Target[T[Target]]((
-  //     Ann[T](
-  //       newBucks.map(_ >> buckAccess)
-  //       vals >> valAccess),
-  //     SP.inj(LeftShift(
-  //       Target[T[Target]]((EmptyAnn[T], wrappedSrc)).embed,
-  //       UnitF[T],
-  //       Free.point(RightSide)))))
-  // }
+    val (buck, newBucks) = concatBuckets(provs)
+    val (merged, buckAccess, valAccess) = concat(buck, Free.roll(f(value)))
 
-  // squash: { squash0: [] }
-  // join:   { join1:   {} }
+    EnvT((
+      Ann(prov.shiftMap(valAccess) :: newBucks.map(_ >> buckAccess), UnitF),
+      SP.inj(LeftShift(
+        EnvT((EmptyAnn[T], QC.inj(Map(input, merged)))).embed,
+        valAccess,
+        Free.point(RightSide)))))
+  }
 
-  // def shiftKeys(input: T[Target]): Target[T[Target]] = {
-  //   val EnvT((Ann[T](provs, vals), src)): Target[T[Target]] =
-  //     input.project
-
-  //   val projValue: FreeMap[T] =
-  //     Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("value")))
-
-  //   val wrappedSrc: F[T[Target]] =
-  //     QC.inj(Map(EnvT((EmptyAnn[T], src)).embed, Free.roll(DupKeys(UnitF[T]))))
-
-  //   Target[T[Target]]((
-  //     Ann[T](
-  //       Free.roll(ProjectField[T, FreeMap[T]](UnitF[T], StrLit[T, Unit]("key"))) :: provs,
-  //       projValue >> vals),
-  //     SP.inj(LeftShift(
-  //       Target[T[Target]]((EmptyAnn[T], wrappedSrc)).embed,
-  //       projValue,
-  //       Free.point(RightSide)))))
-  // }
+  def flatten(input: Target[T[Target]]): Target[T[Target]] = {
+    val EnvT((Ann(buckets, value), fa)) = input
+    EnvT((Ann(prov.nestProvenances(buckets), value), fa))
+  }
 
   // NB: More compilicated LeftShifts are generated as an optimization:
   // before: ThetaJoin(cs, Map((), mf), LeftShift((), struct, repair), comb)
@@ -308,8 +295,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, x:foo) - 1
       //   id(p, x:bar) - 2
       // (one bucket)
-      case structural.FlattenMap | structural.FlattenArray =>
-        shift(values(0)) // TODO
+      case structural.FlattenMap =>
+        flatten(shiftValues(values(0), DupMapKeys(_)))
+      case structural.FlattenArray =>
+        flatten(shiftValues(values(0), DupArrayIndices(_)))
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -318,8 +307,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y:foo) - foo
       //   id(p, y:bar) - bar
       // (one bucket)
-      case structural.FlattenMapKeys | structural.FlattenArrayIndices =>
-        shift(values(0)) // TODO
+      case structural.FlattenMapKeys =>
+        flatten(shiftIds(values(0), DupMapKeys(_)))
+      case structural.FlattenArrayIndices =>
+        flatten(shiftIds(values(0), DupArrayIndices(_)))
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -328,8 +319,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y, foo) - 1
       //   id(p, y, bar) - 2
       // (two buckets)
-      case structural.ShiftMap | structural.ShiftArray =>
-        shift(values(0))
+      case structural.ShiftMap   => shiftValues(values(0), DupMapKeys(_))
+      case structural.ShiftArray => shiftValues(values(0), DupArrayIndices(_))
 
       // id(p, x) - {foo: 12, bar: 18}
       // id(p, y) - {foo: 1, bar: 2}
@@ -338,28 +329,25 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       //   id(p, y, foo) - foo
       //   id(p, y, bar) - bar
       // (two buckets)
-      case structural.ShiftMapKeys | structural.ShiftArrayIndices =>
-        shift(values(0)) // TODO
+      case structural.ShiftMapKeys      => shiftIds(values(0), DupMapKeys(_))
+      case structural.ShiftArrayIndices => shiftIds(values(0), DupArrayIndices(_))
     }
 
-  def invokeExpansion2(
-    func: BinaryFunc,
-    values: Func.Input[T[Target], nat._2]):
-      State[NameGen, TargetT] =
+  def invokeExpansion2(func: BinaryFunc, values: Func.Input[T[Target], nat._2]):
+      TargetT =
     func match {
       // TODO left shift `freshName + range value` values onto provenance
       case set.Range =>
         val (src, buckets, lval, rval) = autojoin(values(0), values(1))
         val (bucksArray, newBucks) = concatBuckets(buckets)
-        concat(bucksArray, Free.roll(Range(lval, rval))) ∘ {
-          case (merged, b, v) =>
-            EnvT((
-              Ann[T](/*Concat(freshName("range"), v) ::*/ newBucks.map(b >> _), v),
-              SP.inj(LeftShift(
-                 EnvT((EmptyAnn[T], src)).embed,
-                 merged,
-                 Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
-        }
+        val (merged, b, v) = concat(bucksArray, Free.roll(Range(lval, rval)))
+
+        EnvT((
+          Ann[T](/*Concat(freshName("range"), v) ::*/ newBucks.map(b >> _), v),
+          SP.inj(LeftShift(
+            EnvT((EmptyAnn[T], src)).embed,
+            merged,
+            Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
     }
 
   def invokeReduction1(
@@ -387,7 +375,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   def invokeThetaJoin(
     values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
-      State[NameGen, TargetT] = {
+      TargetT = {
     val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
     val (buck, newBucks) = concatBuckets(buckets)
 
@@ -401,14 +389,14 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
           Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
 
-    state(EnvT((Ann[T](newBucks.map(_ >> buckAccess), valAccess),
+    EnvT((Ann[T](newBucks.map(_ >> buckAccess), valAccess),
       ThetaJoin[T, F[T[Target]]](
         src,
         Free.roll(left).mapSuspension(FI),
         Free.roll(right).mapSuspension(FI),
         cond,
         tpe,
-        concatted))))
+        concatted)))
   }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
@@ -459,12 +447,12 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         if func.effect ≟ Mapping =>
       val Ann(buckets, value) = a1.project.ask
       val (buck, newBuckets) = concatBuckets(buckets)
+      val (mf, bucketAccess, valAccess) =
+        concat(buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T])))
 
-      (concat(buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T]))) ∘ {
-        case (mf, bucketAccess, valAccess) =>
-          EnvT((
-            Ann(newBuckets.map(_ >> bucketAccess), valAccess),
-            QC.inj(Map(a1, mf))))}).mapK(_.right[PlannerError])
+      stateT(EnvT((
+        Ann(newBuckets.map(_ >> bucketAccess), valAccess),
+        QC.inj(Map(a1, mf)))))
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
@@ -578,11 +566,11 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         if func.effect ≟ Squashing =>
       val Ann(buckets, value) = a1.project.ask
       val (buck, newBuckets) = concatBuckets(prov.squashProvenances(buckets))
-      (concat(buck, value) ∘ { case (mf, buckAccess, valAccess) =>
-        EnvT((
-          Ann(newBuckets.map(_ >> buckAccess), valAccess),
-          QC.inj(Map(a1, mf))))
-      }).mapK(_.right[PlannerError])
+      val (mf, buckAccess, valAccess) = concat(buck, value)
+
+      stateT(EnvT((
+        Ann(newBuckets.map(_ >> buckAccess), valAccess),
+        QC.inj(Map(a1, mf)))))
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Expansion =>
@@ -590,7 +578,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Expansion =>
-      invokeExpansion2(func, Func.Input2(a1, a2)).mapK(_.right[PlannerError])
+      stateT(invokeExpansion2(func, Func.Input2(a1, a2)))
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Transformation =>
@@ -634,8 +622,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Transformation=>
       def invoke(tpe: JoinType) =
-        invokeThetaJoin(Func.Input3(a1, a2, a3), tpe).mapK(_.right[PlannerError])
-        //envtHmap(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))(TJ)
+        stateT(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
 
       func match {
         case set.InnerJoin      => invoke(Inner)
