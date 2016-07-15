@@ -446,28 +446,11 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           ι)))))
       stateT(EnvT((EmptyAnn[T], res)))
 
-    // TODO remove these nodes from LP before they reach us by inline all free vars
-    //case LogicalPlan.FreeF(name) =>
-    //  val res = QC.inj(Map(
-    //    EmptyTarget.embed,
-    //    Free.roll(ProjectField(StrLit(name.toString), UnitF[T]))))
-    //  stateT(EnvT((EmptyAnn[T], res)))
+    case LogicalPlan.FreeF(name) =>
+      (Planner.UnboundVariable(name): PlannerError).left[TargetT].liftM[StateT[?[_], NameGen, ?]]
 
-    //case LogicalPlan.LetF(name, form, body) =>
-    //  for {
-    //    tmpName <- freshName("let").lift[PlannerError \/ ?]
-    //    tup <- merge(form, body).mapK(_.right[PlannerError])
-    //    SrcMerge(src, jb1, jb2) = tup
-    //    theta <- makeBasicTheta(src, jb1, jb2)
-    //  } yield {
-    //    QC.inj(Map(
-    //      QC.inj(Map(
-    //        TJ.inj(theta.src).embed,
-    //        Free.roll(ConcatMaps(
-    //          Free.roll(MakeMap(StrLit(tmpName), UnitF[T])),
-    //          Free.roll(MakeMap(StrLit(name.toString), theta.left)))))).embed,
-    //      rebase(theta.right, Free.roll(ProjectField(UnitF[T], StrLit(tmpName))))))
-    //  }
+    case LogicalPlan.LetF(name, form, body) =>
+      (Planner.InternalError("un-elided Let"): PlannerError).left[TargetT].liftM[StateT[?[_], NameGen, ?]]
 
     case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
       merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _)).mapK(_.right[PlannerError])
@@ -660,9 +643,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         case set.RightOuterJoin => invoke(RightOuter)
         case set.FullOuterJoin  => invoke(FullOuter)
       }
-
-    // TODO Let and FreeVar should not be hit because they will be elided first
-    case _ => ???
   }
 }
 

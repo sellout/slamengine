@@ -49,7 +49,8 @@ object QueryFile {
     * LogicalPlan no longer needs to be exposed.
     */
   val convertToQScript: Fix[LogicalPlan] => PlannerError \/ Fix[QScriptProject[Fix, ?]] =
-    _.transCataM(qscript.lpToQScript).evalZero.map(
+    _.transCata(orOriginal(Optimizer.elideLets[Fix]))
+      .transCataM(qscript.lpToQScript).evalZero.map(
       _.transCata(((_: EnvT[Ann[Fix], QScriptProject[Fix, ?], Fix[QScriptProject[Fix, ?]]]).lower) ⋙ optimize.applyAll))
 
   /** The result of the query is stored in an output file
