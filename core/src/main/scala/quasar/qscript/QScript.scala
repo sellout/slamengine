@@ -469,14 +469,14 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _)).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1)) if func.effect ≟ Mapping =>
-      val EnvT((ann, src)): EnvT[Ann[T], F, T[Target]] =
-        a1.project
+      val Ann(buckets, value) = a1.project.ask
+      val (buck, newBuckets) = concatBuckets(buckets)
 
-      stateT(EnvT((
-        ann,
-        QC.inj(Map(
-          EnvT((EmptyAnn[T], src)).embed,
-          Free.roll(MapFunc.translateUnaryMapping(func)(UnitF)))))))
+      (concat(buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T]))) ∘ {
+        case (mf, bucketAccess, valAccess) =>
+          EnvT((
+            Ann(newBuckets.map(_ >> bucketAccess), valAccess),
+            QC.inj(Map(a1, mf))))}).mapK(_.right[PlannerError])
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
       merge2Map(Func.Input2(a1, a2))(BucketField(_, _)).mapK(_.right[PlannerError])
@@ -707,4 +707,3 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     liftFG(coalesceMapJoin[F]) ⋙
     Normalizable[F].normalize
 }
-
