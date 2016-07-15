@@ -34,7 +34,7 @@ import scalaz._, Scalaz._
   * here, and autojoin_d has been replaced with a lower-level join operation
   * that doesn’t include the cross portion.
   */
-package object qscript {
+package object qscript extends LowPriorityImplicits {
   type Pathable[T[_[_]], A] = Coproduct[Const[DeadEnd, ?], SourcedPathable[T, ?], A]
 
   /** These are the operations included in all forms of QScript.
@@ -103,6 +103,9 @@ package object qscript {
 
   // TODO: move to matryoshka
 
+  implicit def coenvFunctor[F[_]: Functor, E]: Functor[CoEnv[E, F, ?]] =
+    CoEnv.bifunctor[F].rightFunctor
+
   implicit def envtEqual[E: Equal, F[_]](implicit F: Delay[Equal, F]):
       Delay[Equal, EnvT[E, F, ?]] =
     new Delay[Equal, EnvT[E, F, ?]] {
@@ -112,4 +115,14 @@ package object qscript {
             env1.ask ≟ env2.ask && F(eq).equal(env1.lower, env2.lower)
         }
     }
+
+  def envtHmap[F[_], G[_], E, A](env: EnvT[E, F, A])(f: F ~> G): EnvT[E, G, A] =
+    EnvT((env.ask, f(env.lower)))
+}
+
+abstract class LowPriorityImplicits {
+  // TODO: move to matryoshka
+
+  implicit def coenvTraverse[F[_]: Traverse, E]: Traverse[CoEnv[E, F, ?]] =
+    CoEnv.bitraverse[F, Unit].rightTraverse
 }
