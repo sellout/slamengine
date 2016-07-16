@@ -19,7 +19,6 @@ package quasar.qscript
 import quasar._
 import quasar.ejson.{Int => _, _}
 import quasar.fp._
-import quasar.namegen._
 import quasar.qscript.MapFunc._
 import quasar.qscript.MapFuncs._
 import quasar.Planner._
@@ -28,7 +27,7 @@ import quasar.std.StdLib._
 
 import matryoshka._, Recursive.ops._, TraverseT.ops._
 import matryoshka.patterns._
-import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._, IndexedStateT._
+import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._
 import shapeless.{Fin, nat, Sized}
 
 // Need to keep track of our non-type-ensured guarantees:
@@ -408,9 +407,9 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       Data.toEJson[EJson].apply(_).right)
   }
 
-  def lpToQScript: LogicalPlan[T[Target]] => QSState[TargetT] = {
+  def lpToQScript: LogicalPlan[T[Target]] => PlannerError \/ TargetT = {
     case LogicalPlan.ReadF(path) =>
-      stateT(pathToProj(path))
+      pathToProj(path).right
 
     case LogicalPlan.ConstantF(data) =>
       val res = QC.inj(Map(
@@ -418,16 +417,16 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](fromData(data).fold(
           error => CommonEJson.inj(ejson.Str[T[EJson]](error)).embed,
           ι)))))
-      stateT(EnvT((EmptyAnn[T], res)))
+        EnvT((EmptyAnn[T], res)).right
 
     case LogicalPlan.FreeF(name) =>
-      (Planner.UnboundVariable(name): PlannerError).left[TargetT].liftM[StateT[?[_], NameGen, ?]]
+      (Planner.UnboundVariable(name): PlannerError).left[TargetT]
 
     case LogicalPlan.LetF(name, form, body) =>
-      (Planner.InternalError("un-elided Let"): PlannerError).left[TargetT].liftM[StateT[?[_], NameGen, ?]]
+      (Planner.InternalError("un-elided Let"): PlannerError).left[TargetT]
 
     case LogicalPlan.TypecheckF(expr, typ, cont, fallback) =>
-      merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _)).mapK(_.right[PlannerError])
+      merge3Map(Func.Input3(expr, cont, fallback))(Guard(_, typ, _, _)).right[PlannerError]
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Mapping =>
@@ -436,55 +435,55 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       val (mf, bucketAccess, valAccess) =
         concat[T, Unit](buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T])))
 
-      stateT(EnvT((
+      EnvT((
         Ann(newBuckets.map(_ >> bucketAccess), valAccess),
-        QC.inj(Map(a1, mf)))))
+        QC.inj(Map(a1, mf)))).right
 
     case LogicalPlan.InvokeFUnapply(structural.ObjectProject, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
-      stateT(EnvT((
+      EnvT((
         Ann[T](buckets, UnitF[T]),
-        PB.inj(BucketField(EnvT((EmptyAnn[T], src)).embed, lval, rval)))))
+        PB.inj(BucketField(EnvT((EmptyAnn[T], src)).embed, lval, rval)))).right
 
     case LogicalPlan.InvokeFUnapply(structural.ArrayProject, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
-      stateT(EnvT((
+      EnvT((
         Ann[T](buckets, UnitF[T]),
-        PB.inj(BucketIndex(EnvT((EmptyAnn[T], src)).embed, lval, rval)))))
+        PB.inj(BucketIndex(EnvT((EmptyAnn[T], src)).embed, lval, rval)))).right
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Mapping =>
-      merge2Map(Func.Input2(a1, a2))(MapFunc.translateBinaryMapping(func)).mapK(_.right[PlannerError])
+      merge2Map(Func.Input2(a1, a2))(MapFunc.translateBinaryMapping(func)).right[PlannerError]
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Mapping =>
-      merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func)).mapK(_.right[PlannerError])
+      merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func)).right[PlannerError]
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Reduction =>
-      stateT(invokeReduction1(func, Func.Input1(a1)))
+      invokeReduction1(func, Func.Input1(a1)).right
 
     case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
       val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lval))
       val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rval))
-      stateT(EnvT((
+      EnvT((
         Ann[T](buckets, UnitF[T]),
         QC.inj(Take(
           EnvT((EmptyAnn[T], src)).embed,
           Free.roll(left).mapSuspension(FI),
-          Free.roll(left).mapSuspension(FI))))))
+          Free.roll(left).mapSuspension(FI))))).right
 
     case LogicalPlan.InvokeFUnapply(set.Drop, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
       val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lval))
       val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rval))
-      stateT(EnvT((
+      EnvT((
         Ann[T](buckets, UnitF[T]),
         QC.inj(Drop(
           EnvT((EmptyAnn[T], src)).embed,
           Free.roll(left).mapSuspension(FI),
-          Free.roll(left).mapSuspension(FI))))))
+          Free.roll(left).mapSuspension(FI))))).right
 
     case LogicalPlan.InvokeFUnapply(set.OrderBy, Sized(a1, a2, a3)) => {
       // we assign extra variables because of:
@@ -523,24 +522,23 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         val lists: PlannerError \/ List[(FreeMap[T], SortDir)] =
           orderList.map { keysList.zip(_) }
 
-        (lists.map { pairs =>
+        lists.map(pairs =>
           QC.inj(Sort(
             TJ.inj(src).embed,
             rebase(bucket, buckets),
-            pairs))
-        }).liftM[StateT[?[_], NameGen, ?]]
+            pairs)))
       }).join
     }
 
     case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
-      stateT(EnvT((
+      EnvT((
         Ann[T](buckets, UnitF[T]),
         QC.inj(Map(
           EnvT((
             EmptyAnn[T],
             QC.inj(Filter(EnvT((EmptyAnn[T], src)).embed, rval)))).embed,
-          lval)))))
+          lval)))).right
       //mergeTheta[F[Inner]](a1, a2, {
       //  case SrcMerge(src, fm1, fm2) =>
       //    QC.inj(Map(
@@ -554,17 +552,17 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       val (buck, newBuckets) = concatBuckets(prov.squashProvenances(buckets))
       val (mf, buckAccess, valAccess) = concat(buck, value)
 
-      stateT(EnvT((
+      EnvT((
         Ann(newBuckets.map(_ >> buckAccess), valAccess),
-        QC.inj(Map(a1, mf)))))
+        QC.inj(Map(a1, mf)))).right
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Expansion =>
-      stateT(invokeExpansion1(func, Func.Input1(a1)))
+      invokeExpansion1(func, Func.Input1(a1)).right
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Expansion =>
-      stateT(invokeExpansion2(func, Func.Input2(a1, a2)))
+      invokeExpansion2(func, Func.Input2(a1, a2)).right
 
     case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
         if func.effect ≟ Transformation =>
@@ -608,7 +606,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Transformation=>
       def invoke(tpe: JoinType) =
-        stateT(invokeThetaJoin(Func.Input3(a1, a2, a3), tpe))
+        invokeThetaJoin(Func.Input3(a1, a2, a3), tpe).right
 
       func match {
         case set.InnerJoin      => invoke(Inner)

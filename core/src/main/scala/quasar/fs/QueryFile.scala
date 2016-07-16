@@ -52,7 +52,7 @@ object QueryFile {
     // TODO: Instead of eliding Lets, use a `Binder` fold, or ABTs or something
     //       so we don’t duplicate work.
     _.transCata(orOriginal(Optimizer.elideLets[Fix]))
-      .transCataM(qscript.lpToQScript).evalZero.map(qs =>
+      .transCataM(qscript.lpToQScript).map(qs =>
       EnvT((EmptyAnn[Fix], Inject[QScriptCore[Fix, ?], QScriptProject[Fix, ?]].inj(quasar.qscript.Map(qs, qs.project.ask.values)))).embed
         .transCata(((_: EnvT[Ann[Fix], QScriptProject[Fix, ?], Fix[QScriptProject[Fix, ?]]]).lower) ⋙ optimize.applyAll))
 

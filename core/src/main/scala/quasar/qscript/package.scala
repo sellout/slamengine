@@ -17,9 +17,7 @@
 package quasar
 
 import quasar.Predef._
-import quasar.Planner._
 import quasar.fp._
-import quasar.namegen._
 
 import scala.Predef.implicitly
 
@@ -83,8 +81,6 @@ package object qscript extends LowPriorityImplicits {
   type FreeQS[T[_[_]]] = FreeUnit[QScriptProject[T, ?]]
 
   type JoinFunc[T[_[_]]] = Free[MapFunc[T, ?], JoinSide]
-
-  type QSState[A] = StateT[PlannerError \/ ?, NameGen, A]
 
   case class Ann[T[_[_]]](provenance: List[FreeMap[T]], values: FreeMap[T])
 
