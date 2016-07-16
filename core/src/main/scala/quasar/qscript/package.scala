@@ -101,6 +101,24 @@ package object qscript extends LowPriorityImplicits {
 
   def rebase[M[_]: Bind, A](in: M[A], field: M[A]): M[A] = in >> field
 
+  import MapFunc._
+  import MapFuncs._
+
+  def concatBuckets[T[_[_]]: Corecursive](buckets: List[FreeMap[T]]):
+      (FreeMap[T], List[FreeMap[T]]) =
+    (ConcatArraysN(buckets.map(b => Free.roll(MakeArray[T, FreeMap[T]](b))): _*),
+      buckets.zipWithIndex.map(p =>
+        Free.roll(ProjectIndex[T, FreeMap[T]](
+          UnitF[T],
+          IntLit[T, Unit](p._2)))))
+
+  def concat[T[_[_]]: Corecursive, A](
+    l: Free[MapFunc[T, ?], A], r: Free[MapFunc[T, ?], A]):
+      (Free[MapFunc[T, ?], A], FreeMap[T], FreeMap[T]) =
+    (Free.roll(ConcatArrays(Free.roll(MakeArray(l)), Free.roll(MakeArray(r)))),
+      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0))),
+      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1))))
+
   // TODO: move to matryoshka
 
   implicit def coenvFunctor[F[_]: Functor, E]: Functor[CoEnv[E, F, ?]] =

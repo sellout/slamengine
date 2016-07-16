@@ -85,7 +85,8 @@ object ThetaJoin {
         right: FreeMap[IT],
         p1: EnvT[Ann[T], ThetaJoin[IT, ?], Unit],
         p2: EnvT[Ann[T], ThetaJoin[IT, ?], Unit]) =
-        OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
+        // TODO: merge two joins with different combine funcs
+        (p1 ≟ p2).option(SrcMerge(p1, left, right))
     }
 
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:

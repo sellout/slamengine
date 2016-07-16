@@ -120,64 +120,63 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   }
 
   // E, M, F, A => A => M[E[F[A]]]
-  val zipper: ElgotCoalgebraM[
+  val zipper: ElgotCoalgebra[
       ZipperAcc \/ ?,
-      State[NameGen, ?],
       ListF[Target[Unit], ?],
       (ZipperSides, ZipperTails)] = {
-    case (zs @ ZipperSides(lm, rm), zt @ ZipperTails(l :: ls, r :: rs)) => {
-      mergeable.mergeSrcs(lm, rm, l, r).fold[ZipperAcc \/ ListF[Target[Unit], (ZipperSides, ZipperTails)]]({
-          case SrcMerge(inn, lmf, rmf) =>
-            ConsF(inn, (ZipperSides(lmf, rmf), ZipperTails(ls, rs))).right[ZipperAcc]
-        }, ZipperAcc(Nil, zs, zt).left)
-    }
+    case (zs @ ZipperSides(lm, rm), zt @ ZipperTails(l :: ls, r :: rs)) =>
+      mergeable.mergeSrcs(lm, rm, l, r).fold[ZipperAcc \/ ListF[Target[Unit], (ZipperSides, ZipperTails)]](
+        ZipperAcc(Nil, zs, zt).left) {
+        case SrcMerge(inn, lmf, rmf) =>
+          ConsF(inn, (ZipperSides(lmf, rmf), ZipperTails(ls, rs))).right[ZipperAcc]
+      }
     case (sides, tails) =>
-      ZipperAcc(Nil, sides, tails).left.point[State[NameGen, ?]]
+      ZipperAcc(Nil, sides, tails).left
   }
 
   type MergeComponent = (FreeMap[T], Ann[T], FreeQS[T])
   type MergeResult = (T[Target], MergeComponent, MergeComponent)
 
-  def merge(left: T[Target], right: T[Target]): State[NameGen, MergeResult] = {
+  def merge(left: T[Target], right: T[Target]): MergeResult = {
     val lLin: Envs = left.cata(linearizeEnv).reverse
     val rLin: Envs = right.cata(linearizeEnv).reverse
 
-    elgotM((
-      ZipperSides(UnitF[T], UnitF[T]),
-      ZipperTails(lLin, rLin)))(
-      consZipped(_: ListF[Target[Unit], ZipperAcc]).point[State[NameGen, ?]], zipper) ∘ {
-        case ZipperAcc(common, ZipperSides(lMap, rMap), ZipperTails(lTail, rTail)) =>
-          val leftF: Free[F, Unit] =
-            foldIso(CoEnv.freeIso[Unit, Target])
-              .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
-                new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
-              }
+    val ZipperAcc(common, ZipperSides(lMap, rMap), ZipperTails(lTail, rTail)) =
+      elgot(
+        (ZipperSides(UnitF[T], UnitF[T]), ZipperTails(lLin, rLin)))(
+        consZipped, zipper)
 
-          val rightF: Free[F, Unit] =
-            foldIso(CoEnv.freeIso[Unit, Target])
-              .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
-                new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
-              }
+    val leftF: Free[F, Unit] =
+      foldIso(CoEnv.freeIso[Unit, Target])
+        .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
+        new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
+      }
 
-          val commonSrc: T[Target] = 
-            common.reverse.ana[T, Target](delinearizeInner)
+    val rightF: Free[F, Unit] =
+      foldIso(CoEnv.freeIso[Unit, Target])
+        .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
+        new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
+      }
 
-          // TODO totally wrong!!!!!!!!!!!!!
-          val leftAccess: MergeComponent = (
-            UnitF[T],
-            EmptyAnn[T],
-            leftF.mapSuspension(FI))
+    val commonSrc: T[Target] =
+      common.reverse.ana[T, Target](delinearizeInner)
 
-          val rightAccess: MergeComponent = (
-            UnitF[T],
-            EmptyAnn[T],
-            rightF.mapSuspension(FI))
+    // TODO totally wrong!!!!!!!!!!!!!
 
-          (commonSrc, leftAccess, rightAccess) 
+    val leftAccess: MergeComponent = (
+      UnitF[T],
+      EmptyAnn[T],
+      leftF.mapSuspension(FI))
 
-            //rebase(leftRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], lMap)))))),
-            //rebase(rightRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], rMap)))))))
-    }
+    val rightAccess: MergeComponent = (
+      UnitF[T],
+      EmptyAnn[T],
+      rightF.mapSuspension(FI))
+
+    (commonSrc, leftAccess, rightAccess)
+
+    //rebase(leftRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], lMap)))))),
+    //rebase(rightRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], rMap)))))))
   }
 
   /** This unifies a pair of sources into a single one, with additional
@@ -199,19 +198,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
 
     (fullSrc, fullBuckets, bval >> lval, bval >> cval, rval)
   }
-
-  def concatBuckets(buckets: List[FreeMap[T]]): (FreeMap[T], List[FreeMap[T]]) =
-    (ConcatArraysN(buckets.map(b => Free.roll(MakeArray[T, FreeMap[T]](b))): _*),
-      buckets.zipWithIndex.map(p =>
-        Free.roll(ProjectIndex[T, FreeMap[T]](
-          UnitF[T],
-          IntLit[T, Unit](p._2)))))
-
-  def concat[A](l: Free[MapFunc[T, ?], A], r: Free[MapFunc[T, ?], A]):
-      (Free[MapFunc[T, ?], A], FreeMap[T], FreeMap[T]) =
-    (Free.roll(ConcatArrays(Free.roll(MakeArray(l)), Free.roll(MakeArray(r)))),
-      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0))),
-      Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1))))
 
   def merge2Map(
     values: Func.Input[T[Target], nat._2])(
@@ -340,7 +326,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       case set.Range =>
         val (src, buckets, lval, rval) = autojoin(values(0), values(1))
         val (bucksArray, newBucks) = concatBuckets(buckets)
-        val (merged, b, v) = concat(bucksArray, Free.roll(Range(lval, rval)))
+        val (merged, b, v) = concat[T, Unit](bucksArray, Free.roll(Range(lval, rval)))
 
         EnvT((
           Ann[T](/*Concat(freshName("range"), v) ::*/ newBucks.map(b >> _), v),
@@ -448,7 +434,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       val Ann(buckets, value) = a1.project.ask
       val (buck, newBuckets) = concatBuckets(buckets)
       val (mf, bucketAccess, valAccess) =
-        concat(buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T])))
+        concat[T, Unit](buck, Free.roll(MapFunc.translateUnaryMapping(func)(UnitF[T])))
 
       stateT(EnvT((
         Ann(newBuckets.map(_ >> bucketAccess), valAccess),

@@ -105,7 +105,8 @@ object SourcedPathable {
         right: FreeMap[IT],
         p1: EnvT[Ann[T], SourcedPathable[IT, ?], Unit],
         p2: EnvT[Ann[T], SourcedPathable[IT, ?], Unit]) =
-        OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
+        // TODO: Merge two LeftShifts with different repair functions
+        (p1 ≟ p2).option(SrcMerge(p1, left, right))
     }
 
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:

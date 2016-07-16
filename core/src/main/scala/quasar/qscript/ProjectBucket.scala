@@ -98,6 +98,6 @@ object ProjectBucket {
         right: FreeMap[IT],
         p1: EnvT[Ann[IT], ProjectBucket[IT, ?], Unit],
         p2: EnvT[Ann[IT], ProjectBucket[IT, ?], Unit]) =
-        OptionT(state((p1 ≟ p2).option(SrcMerge(p1, left, right))))
+        (p1 ≟ p2).option(SrcMerge(p1, left, right))
     }
 }
