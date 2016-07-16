@@ -102,7 +102,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     fl => fl.void :: fl.lower.fold
 
 
-  def delinearizeInner[F[_]: Functor, A]: Coalgebra[Target, List[Target[A]]] = {
+  def delinearizeInner[A]: Coalgebra[Target, List[Target[A]]] = {
     case Nil => EnvT((EmptyAnn, DE.inj(Const[DeadEnd, List[Target[A]]](Root))))
     case h :: t => h.map(_ => t)
   }
@@ -374,14 +374,15 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
           Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
 
-    EnvT((Ann[T](newBucks.map(_ >> buckAccess), valAccess),
-      ThetaJoin[T, F[T[Target]]](
-        src,
+    EnvT((
+      Ann[T](newBucks.map(_ >> buckAccess), valAccess),
+      TJ.inj(ThetaJoin(
+        EnvT((EmptyAnn[T], src)).embed,
         Free.roll(left).mapSuspension(FI),
         Free.roll(right).mapSuspension(FI),
         cond,
         tpe,
-        concatted)))
+        concatted))))
   }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
