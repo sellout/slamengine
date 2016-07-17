@@ -50,29 +50,47 @@ object MapFunc {
 
   // TODO subtyping is preventing embeding of MapFuncs
   object ConcatArraysN {
-    def apply[T2[_[_]]: Corecursive, A](args: Free[MapFunc[T2, ?], A]*): Free[MapFunc[T2, ?], A] =
-      args.toList match {
-        case h :: t => t.foldLeft(h)((a, b) => Free.roll(ConcatArrays(a, b): MapFunc[T2, Free[MapFunc[T2, ?], A]]))
-        case Nil    => Free.roll(Nullary[T2, Free[MapFunc[T2, ?], A]](CommonEJson.inj(ejson.Arr[T2[EJson]](Nil)).embed))
-      }
-    def unapply[T2[_[_]], A](
-      mf: Free[MapFunc[T2, ?], A]):
-        Option[List[Free[MapFunc[T2, ?], A]]] =
-      mf.resume.fold({
-        case ConcatArrays(h, t) =>
-          (unapply(h).getOrElse(List(h)) ++
-            unapply(t).getOrElse(List(t))).some
-        case _ => None
-      }, _ => None)
-  }
+    private implicit def implicitPrio[F[_], G[_]]: Inject[G, Coproduct[F, G, ?]] = Inject.rightInjectInstance
 
-  private implicit def implicitPrio[F[_], G[_]]: Inject[F, Coproduct[F, G, ?]] = Inject.leftInjectInstance
+    def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive, A](args: List[Free[MapFunc[T2, ?], A]]):
+        Free[MapFunc[T2, ?], A] =
+      apply(args.map(_.ana[T, CoEnv[A, MapFunc[T2, ?], ?]](CoEnv.freeIso[A, MapFunc[T2, ?]].reverseGet)))
+        .embed.cata(CoEnv.freeIso[A, MapFunc[T2, ?]].get)
+
+    def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive, A](args: List[T[CoEnv[A, MapFunc[T2, ?], ?]]]):
+        CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]] = {
+      scala.Predef.println(s"concatarrays apply $args")
+      args.toList match {
+        case h :: t => t.foldLeft(h)((a, b) => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]((ConcatArrays(a, b): MapFunc[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]]).right).embed).project
+        case Nil    => CoEnv(\/-(Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(ejson.Arr[T2[EJson]](Nil)).embed)))
+      }
+    }
+
+    def unapply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive, A](
+      mf: CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]):
+        Option[List[T[CoEnv[A, MapFunc[T2, ?], ?]]]] =
+      mf.run.fold(
+        {/*scala.Predef.println(s"kappa none ${mf}");*/ κ(None)},
+        {
+          case MakeArray(_) | Nullary(Embed(Inj(ejson.Arr(_)))) =>
+            //scala.Predef.println(s">>>>make array")
+            List(mf.embed).some
+          case ConcatArrays(h, t) =>
+            //scala.Predef.println(s">>>>concat arrays")
+            (unapply(h.project).getOrElse(List(h)) ++
+              unapply(t.project).getOrElse(List(t))).some
+          case x => {scala.Predef.println(s"hit unapply none case with $x"); None }
+        })
+
+  }
 
   type CoMF[T2[_[_]], A, B] = CoEnv[A, MapFunc[T2, ?], B]
   type CoMFR[T[_[_]], T2[_[_]], A] = CoMF[T2, A, T[CoMF[T2, A, ?]]]
 
   // TODO subtyping is preventing embeding of MapFuncs
   object ConcatMapsN {
+    private implicit def implicitPrio[F[_], G[_]]: Inject[F, Coproduct[F, G, ?]] = Inject.leftInjectInstance
+
     def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive, A](args: List[T[CoEnv[A, MapFunc[T2, ?], ?]]]):
         CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]] = {
       scala.Predef.println(s"concatmaps apply $args")
@@ -103,7 +121,9 @@ object MapFunc {
   //       its own normalization.
   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
   def normalize[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive: Corecursive: EqualT, A]:
-      CoMFR[T, T2, A] => Option[CoMFR[T, T2, A]] =
+      CoMFR[T, T2, A] => Option[CoMFR[T, T2, A]] = {
+    implicit def implicitPrio[F[_], G[_]]: Inject[F, Coproduct[F, G, ?]] = Inject.leftInjectInstance
+
     _.run.fold(
       κ(None),
       {
@@ -112,6 +132,16 @@ object MapFunc {
           CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](
             Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(
               ejson.Bool[T2[EJson]](v1 ≟ v2)).embed).right).some
+        case ProjectIndex(Embed(ConcatArraysN(as)), Embed(CoEnv(\/-(Nullary(Embed(Inj(ejson.Int(index)))))))) =>
+          as.foldLeftM[Option[CoMFR[T, T2, A]] \/ ?, BigInt](index)((i, mf) =>
+            if (i ≟ 0) mf match {
+              // TODO: Handle the literal array case
+              case Embed(CoEnv(\/-(MakeArray(Embed(value))))) => value.some.left
+            }
+            else mf match {
+              case Embed(CoEnv(\/-(MakeArray(_)))) => (index - 1).right
+              case _ => None.left
+            }).fold(ι, κ(None))
         case ProjectField(Embed(ConcatMapsN(as)), Embed(CoEnv(\/-(Nullary(field))))) =>
           //scala.Predef.println(s"hit normalize case")
           as.collectFirst {
@@ -126,6 +156,7 @@ object MapFunc {
           }
         case x => {/*scala.Predef.println(s"hit none case with $x");*/ None }
       })
+  }
 
   implicit def traverse[T[_[_]]]: Traverse[MapFunc[T, ?]] =
     new Traverse[MapFunc[T, ?]] {

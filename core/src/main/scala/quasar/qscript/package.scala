@@ -101,9 +101,9 @@ package object qscript extends LowPriorityImplicits {
   import MapFunc._
   import MapFuncs._
 
-  def concatBuckets[T[_[_]]: Corecursive](buckets: List[FreeMap[T]]):
+  def concatBuckets[T[_[_]]: Recursive: Corecursive](buckets: List[FreeMap[T]]):
       (FreeMap[T], List[FreeMap[T]]) =
-    (ConcatArraysN(buckets.map(b => Free.roll(MakeArray[T, FreeMap[T]](b))): _*),
+    (ConcatArraysN(buckets.map(b => Free.roll(MakeArray[T, FreeMap[T]](b)))),
       buckets.zipWithIndex.map(p =>
         Free.roll(ProjectIndex[T, FreeMap[T]](
           UnitF[T],
