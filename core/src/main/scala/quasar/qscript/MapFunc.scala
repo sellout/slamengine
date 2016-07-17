@@ -107,8 +107,11 @@ object MapFunc {
     _.run.fold(
       κ(None),
       {
-        //case ProjectField(Embed(CoEnv(\/-(ConcatMaps(_, _)))), Embed(CoEnv(\/-(Nullary(field))))) => { scala.Predef.println(s"matched ProjectField"); None }
-        //case ProjectField(Embed(ConcatMapsN(as)), Embed(CoEnv(\/-(Nullary(field))))) => { scala.Predef.println(s"matched ProjectField"); None }
+        case Eq(Embed(CoEnv(\/-(Nullary(v1)))), Embed(CoEnv(\/-(Nullary(v2))))) =>
+          println("hit eq case!")
+          CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](
+            Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(
+              ejson.Bool[T2[EJson]](v1 ≟ v2)).embed).right).some
         case ProjectField(Embed(ConcatMapsN(as)), Embed(CoEnv(\/-(Nullary(field))))) =>
           //scala.Predef.println(s"hit normalize case")
           as.collectFirst {

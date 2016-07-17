@@ -691,7 +691,7 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
   // - coalesce nodes
   // - normalize mapfunc
   // TODO: Apply this to FreeQS structures.
-  def applyAll[F[_]: Functor](
+  def applyAll[F[_]: Functor: Normalizable](
     implicit QC: QScriptCore[T, ?] :<: F,
              TJ: ThetaJoin[T, ?] :<: F,
              PB: ProjectBucket[T, ?] :<: F):

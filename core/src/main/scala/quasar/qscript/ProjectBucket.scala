@@ -100,4 +100,7 @@ object ProjectBucket {
         p2: EnvT[Ann[IT], ProjectBucket[IT, ?], Unit]) =
         (p1 ≟ p2).option(SrcMerge(p1, left, right))
     }
+
+  implicit def normalizable[T[_[_]]]: Normalizable[ProjectBucket[T, ?]] =
+    Normalizable.default[ProjectBucket[T, ?]]
 }
