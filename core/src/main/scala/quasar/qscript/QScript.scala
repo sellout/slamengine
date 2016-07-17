@@ -158,6 +158,9 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     (commonSrc, leftF, rightF)
   }
 
+  def someAnn[A](v: Target[Free[Target, A]] \/ A, default: T[Target]) =
+    v.fold(_.ask, κ(default.project.ask))
+
   /** This unifies a pair of sources into a single one, with additional
     * expressions to access the combined bucketing info, as well as the left and
     * right values.
@@ -170,10 +173,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     val (combine, lacc, racc) =
       concat[T, JoinSide](Free.point(LeftSide), Free.point(RightSide))
 
-    def someAnn[A](v: Target[Free[Target, A]] \/ A) =
-      v.fold(_.ask, κ(src.project.ask))
-    val lann = someAnn(lcomp)
-    val rann = someAnn(rcomp)
+    val lann = someAnn(lcomp, src)
+    val rann = someAnn(rcomp, src)
     (TJ.inj(ThetaJoin(
       src,
       lfree.mapSuspension(FI.compose(envtLowerNT)),
@@ -414,6 +415,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       Data.toEJson[EJson].apply(_).right)
   }
 
+  // TODO: Replace disjunction with validation.
   def lpToQScript: LogicalPlan[T[Target]] => PlannerError \/ TargetT = {
     case LogicalPlan.ReadF(path) =>
       pathToProj(path).right
@@ -571,44 +573,36 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         if func.effect ≟ Expansion =>
       invokeExpansion2(func, Func.Input2(a1, a2)).right
 
-    case LogicalPlan.InvokeFUnapply(func @ BinaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2))
-        if func.effect ≟ Transformation =>
-      func match {
-        case set.GroupBy => ??? // TODO
-        case set.Union => ??? // TODO
-          //val Ann(buckets1, value1) = a1.project.ask
-          //val Ann(buckets2, value2) = a2.project.ask
-          //val provs: (List[FreeMap[T]], List[FreeMap[T]]) = prov.unionProvenances(buckets1, buckets2)
+    case LogicalPlan.InvokeFUnapply(set.GroupBy, Sized(a1, a2)) => ??? // TODO
+    case LogicalPlan.InvokeFUnapply(set.Union, Sized(a1, a2)) =>
+      val (src, lfree, rfree) = merge(a1, a2)
+      EnvT((
+        Ann(
+          prov.unionProvenances(
+            someAnn(lfree.resume, src).provenance,
+            someAnn(rfree.resume, src).provenance),
+          UnitF), // FIXME: Not UnitF
+        SP.inj(Union(src,
+          lfree.mapSuspension(FI.compose(envtLowerNT)),
+          rfree.mapSuspension(FI.compose(envtLowerNT)))))).right
 
-          //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
-          //  case SrcMerge(src, lbr, rbr) =>  // commom source and branch access
-          //    val Ann(srcBuckets, srcValue) = src.project.ask
-          //    val (srcBucket, srcBucketAccess) = concatBuckets(srcBuckets)
-          //    concat(srcBucket, srcValue) ∘ { case (mf, buckAccess, valAccess) =>
-          //      srcBucketAccess.map(_ >> buckAccess)
-          //    }
-          //    
-          //    EnvT((
-          //      Ann(),
-          //      SP.inj(Union(src, lbr.mapSuspension(FI), rbr.mapSuspension(FI)))))
-          //}
-        case set.Intersect => ??? // TODO
-          //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
-          //  case SrcMerge(src, jb1, jb2) =>
-          //    TJ.inj(ThetaJoin(src, jb1.mapSuspension(FI), jb2.mapSuspension(FI), equiJF, Inner, Free.point(LeftSide)))
-          //}
-        case set.Except => ??? // TODO
-          //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
-          //  case SrcMerge(src, jb1, jb2) =>
-          //    TJ.inj(ThetaJoin(
-          //      src,
-          //      jb1.mapSuspension(FI),
-          //      jb2.mapSuspension(FI),
-          //      Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
-          //      LeftOuter,
-          //      Free.point(LeftSide)))
-          //}
-      }
+    case LogicalPlan.InvokeFUnapply(set.Intersect, Sized(a1, a2)) => ??? // TODO
+      //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
+      //  case SrcMerge(src, jb1, jb2) =>
+      //    TJ.inj(ThetaJoin(src, jb1.mapSuspension(FI), jb2.mapSuspension(FI), equiJF, Inner, Free.point(LeftSide)))
+      //}
+
+    case LogicalPlan.InvokeFUnapply(set.Except, Sized(a1, a2)) => ??? // TODO
+      //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
+      //  case SrcMerge(src, jb1, jb2) =>
+      //    TJ.inj(ThetaJoin(
+      //      src,
+      //      jb1.mapSuspension(FI),
+      //      jb2.mapSuspension(FI),
+      //      Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
+      //      LeftOuter,
+      //      Free.point(LeftSide)))
+      //}
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Transformation=>

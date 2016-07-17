@@ -32,6 +32,7 @@ class Provenance[T[_[_]]: Corecursive] {
   // projectfield: f
   // projectindex: i
   // join:         j [] // should be commutative, but currently isn’t
+  // union:        u [] // should be commutative, but currently isn’t
   // nest:         n []
   // shiftmap:     m
   // shiftarray:   a
@@ -42,6 +43,12 @@ class Provenance[T[_[_]]: Corecursive] {
 
   def join[A](left: Free[MapFunc[T, ?], A], right: Free[MapFunc[T, ?], A]) =
     tagIdentity("j",
+      Free.roll(ConcatArrays(
+        Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](left)),
+        Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](right)))))
+
+  def union[A](left: Free[MapFunc[T, ?], A], right: Free[MapFunc[T, ?], A]) =
+    tagIdentity("u",
       Free.roll(ConcatArrays(
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](left)),
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](right)))))
@@ -61,12 +68,12 @@ class Provenance[T[_[_]]: Corecursive] {
     }
 
   def unionProvenances(leftBuckets: List[FreeMap[T]], rightBuckets: List[FreeMap[T]]):
-      (List[FreeMap[T]], List[FreeMap[T]]) =
+      List[FreeMap[T]] =
     leftBuckets.alignWith(rightBuckets) {
-      case \&/.Both(l, r) => (l, r)
-      case \&/.This(l)    => (l, NullLit[T, Unit]())
-      case \&/.That(r)    => (NullLit[T, Unit](), r)
-    }.unzip
+      case \&/.Both(l, r) => union(l, r)
+      case \&/.This(l)    => union(l, NullLit[T, Unit]())
+      case \&/.That(r)    => union(NullLit[T, Unit](), r)
+    }
 
   def nestProvenances(buckets: List[FreeMap[T]]): List[FreeMap[T]] =
     buckets match {
