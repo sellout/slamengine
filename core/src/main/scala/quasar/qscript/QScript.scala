@@ -25,7 +25,7 @@ import quasar.Planner._
 import quasar.Predef._
 import quasar.std.StdLib._
 
-import matryoshka._, Recursive.ops._, TraverseT.ops._
+import matryoshka._, Recursive.ops._
 import matryoshka.patterns._
 import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._
 import shapeless.{Fin, nat, Sized}
@@ -347,50 +347,54 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     values: Func.Input[T[Target], nat._1]):
       TargetT = {
     val EnvT((Ann(provs, reduce), src)): TargetT = values(0).project
-    val (newProvs, provAccess) = concatBuckets(provs.tail)
+    // NB: If there’s no provenance, then there’s nothing to reduce. We’re
+    //     already holding a single value.
+    provs.tailOption.fold(values(0).project) { tail =>
+      val (newProvs, provAccess) = concatBuckets(tail)
 
-    EnvT[Ann[T], F, T[Target]]((
-      Ann[T](
-        provAccess.map(_ >> Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0)))),
-        Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1)))),
-      QC.inj(Reduce[T, T[Target], nat._1](
-        EnvT((EmptyAnn[T], src)).embed,
-        newProvs,
-        Sized[List](
-          ReduceFuncs.Arbitrary(newProvs),
-          ReduceFunc.translateReduction[FreeMap[T]](func)(reduce)),
-        Free.roll(ConcatArrays(
-          Free.roll(MakeArray(Free.point(Fin[nat._0, nat._2]))),
-          Free.roll(MakeArray(Free.point(Fin[nat._1, nat._2])))))))))
+      EnvT[Ann[T], F, T[Target]]((
+        Ann[T](
+          provAccess.map(_ >> Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0)))),
+          Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1)))),
+        QC.inj(Reduce[T, T[Target], nat._1](
+          EnvT((EmptyAnn[T], src)).embed,
+          newProvs,
+          Sized[List](
+            ReduceFuncs.Arbitrary(newProvs),
+            ReduceFunc.translateReduction[FreeMap[T]](func)(reduce)),
+          Free.roll(ConcatArrays(
+            Free.roll(MakeArray(Free.point(Fin[nat._0, nat._2]))),
+            Free.roll(MakeArray(Free.point(Fin[nat._1, nat._2])))))))))
+    }
   }
 
   def invokeThetaJoin(
     values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
-      TargetT = {
-    val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
-    val (buck, newBucks) = concatBuckets(buckets)
+      TargetT = ??? // {
+  //   val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
+  //   val (buck, newBucks) = concatBuckets(buckets)
 
-    val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lBranch))
-    val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rBranch))
+  //   val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lBranch))
+  //   val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rBranch))
 
-    val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
-      concat(
-        buck: FreeMap[T],
-        Free.roll(ConcatMaps(
-          Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-          Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
+  //   val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
+  //     concat(
+  //       buck: FreeMap[T],
+  //       Free.roll(ConcatMaps(
+  //         Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
+  //         Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
 
-    EnvT((
-      Ann[T](newBucks.map(_ >> buckAccess), valAccess),
-      TJ.inj(ThetaJoin(
-        EnvT((EmptyAnn[T], src)).embed,
-        Free.roll(left).mapSuspension(FI),
-        Free.roll(right).mapSuspension(FI),
-        cond,
-        tpe,
-        concatted))))
-  }
+  //   EnvT((
+  //     Ann[T](newBucks.map(_ >> buckAccess), valAccess),
+  //     TJ.inj(ThetaJoin(
+  //       EnvT((EmptyAnn[T], src)).embed,
+  //       Free.roll(left).mapSuspension(FI),
+  //       Free.roll(right).mapSuspension(FI),
+  //       cond,
+  //       tpe,
+  //       concatted))))
+  // }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
     val Ann(provenance, values) = prefix.ask
@@ -494,50 +498,46 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           Free.roll(left).mapSuspension(FI),
           Free.roll(left).mapSuspension(FI))))).right
 
-    case LogicalPlan.InvokeFUnapply(set.OrderBy, Sized(a1, a2, a3)) => {
-      // we assign extra variables because of:
-      // https://issues.scala-lang.org/browse/SI-5589
-      // https://issues.scala-lang.org/browse/SI-7515
+    case LogicalPlan.InvokeFUnapply(set.OrderBy, Sized(a1, a2, a3)) => ??? // {
+    //   (for {
+    //     bucket0 <- findBucket(a1)
+    //     (bucketSrc, bucket, thing) = bucket0
+    //     merged0 <- merge3(a2, a3, bucketSrc)
+    //   } yield {
+    //     val Merge3(src, keys, order, buckets, arrays) = merged0
+    //     val rebasedArrays = rebase(thing, arrays)
 
-      (for {
-        bucket0 <- findBucket(a1)
-        (bucketSrc, bucket, thing) = bucket0
-        merged0 <- merge3(a2, a3, bucketSrc)
-      } yield {
-        val Merge3(src, keys, order, buckets, arrays) = merged0
-        val rebasedArrays = rebase(thing, arrays)
+    //     val keysList: List[FreeMap[T]] = rebase(rebasedArrays, keys) match {
+    //       case ConcatArraysN(as) => as
+    //       case mf => List(mf)
+    //     }
 
-        val keysList: List[FreeMap[T]] = rebase(rebasedArrays, keys) match {
-          case ConcatArraysN(as) => as
-          case mf => List(mf)
-        }
+    //     // TODO handle errors
+    //     val orderList: PlannerError \/ List[SortDir] = {
+    //       val orderStrs: PlannerError \/ List[String] = rebase(rebasedArrays, order) match {
+    //         case ConcatArraysN(as) => as.traverse(StrLit.unapply(_)) \/> InternalError("unsupported ordering type") // disjunctionify
+    //         case StrLit(str) => List(str).right
+    //         case _ => InternalError("unsupported ordering function").left
+    //       }
+    //       orderStrs.flatMap {
+    //         _.traverse {
+    //           case "ASC" => SortDir.Ascending.right
+    //           case "DESC" => SortDir.Descending.right
+    //           case _ => InternalError("unsupported ordering direction").left
+    //         }
+    //       }
+    //     }
 
-        // TODO handle errors
-        val orderList: PlannerError \/ List[SortDir] = {
-          val orderStrs: PlannerError \/ List[String] = rebase(rebasedArrays, order) match {
-            case ConcatArraysN(as) => as.traverse(StrLit.unapply(_)) \/> InternalError("unsupported ordering type") // disjunctionify
-            case StrLit(str) => List(str).right
-            case _ => InternalError("unsupported ordering function").left
-          }
-          orderStrs.flatMap {
-            _.traverse {
-              case "ASC" => SortDir.Ascending.right
-              case "DESC" => SortDir.Descending.right
-              case _ => InternalError("unsupported ordering direction").left
-            }
-          }
-        }
+    //     val lists: PlannerError \/ List[(FreeMap[T], SortDir)] =
+    //       orderList.map { keysList.zip(_) }
 
-        val lists: PlannerError \/ List[(FreeMap[T], SortDir)] =
-          orderList.map { keysList.zip(_) }
-
-        lists.map(pairs =>
-          QC.inj(Sort(
-            TJ.inj(src).embed,
-            rebase(bucket, buckets),
-            pairs)))
-      }).join
-    }
+    //     lists.map(pairs =>
+    //       QC.inj(Sort(
+    //         TJ.inj(src).embed,
+    //         rebase(bucket, buckets),
+    //         pairs)))
+    //   }).join
+    // }
 
     case LogicalPlan.InvokeFUnapply(set.Filter, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)

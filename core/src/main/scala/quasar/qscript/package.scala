@@ -23,6 +23,7 @@ import scala.Predef.implicitly
 
 import matryoshka._
 import matryoshka.patterns._
+import monocle.macros.Lenses
 import scalaz._, Scalaz._
 
 /** Here we no longer care about provenance. Backends can’t do anything with
@@ -82,7 +83,7 @@ package object qscript extends LowPriorityImplicits {
 
   type JoinFunc[T[_[_]]] = Free[MapFunc[T, ?], JoinSide]
 
-  case class Ann[T[_[_]]](provenance: List[FreeMap[T]], values: FreeMap[T])
+  @Lenses final case class Ann[T[_[_]]](provenance: List[FreeMap[T]], values: FreeMap[T])
 
   object Ann {
     implicit def equal[T[_[_]]: EqualT]: Equal[Ann[T]] =
