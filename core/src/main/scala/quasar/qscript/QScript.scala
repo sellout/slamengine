@@ -175,15 +175,16 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
 
     val lann = someAnn(lcomp, src)
     val rann = someAnn(rcomp, src)
+    val commonProvLength = src.project.ask.provenance.length
     (TJ.inj(ThetaJoin(
       src,
       lfree.mapSuspension(FI.compose(envtLowerNT)),
       rfree.mapSuspension(FI.compose(envtLowerNT)),
-      // FIXME: need to compare only the portion of the identity that represents
-      //        the common src
+      // FIXME: not quite right – e.g., if there is a reduction in a branch the
+      //        condition won’t line up.
       Free.roll(Eq(
-        concatBuckets(lann.provenance)._1.map(κ(LeftSide)),
-        concatBuckets(rann.provenance)._1.map(κ(RightSide)))),
+        concatBuckets(lann.provenance.drop(lann.provenance.length - commonProvLength))._1.map(κ(LeftSide)),
+        concatBuckets(rann.provenance.drop(rann.provenance.length - commonProvLength))._1.map(κ(RightSide)))),
       Inner,
       combine)),
       prov.joinProvenances(
