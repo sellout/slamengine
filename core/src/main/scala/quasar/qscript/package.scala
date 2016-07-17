@@ -130,8 +130,14 @@ package object qscript extends LowPriorityImplicits {
         }
     }
 
-  def envtHmap[F[_], G[_], E, A](env: EnvT[E, F, A])(f: F ~> G): EnvT[E, G, A] =
-    EnvT((env.ask, f(env.lower)))
+  def envtHmap[F[_], G[_], E, A](f: F ~> G): EnvT[E, F, ?] ~> EnvT[E, G, ?] =
+    new (EnvT[E, F, ?] ~> EnvT[E, G, ?]) {
+      def apply[A](env: EnvT[E, F, A]) = EnvT((env.ask, f(env.lower)))
+    }
+
+  def envtLowerNT[F[_], E]: EnvT[E, F, ?] ~> F = new (EnvT[E, F, ?] ~> F) {
+    def apply[A](fa: EnvT[E, F, A]): F[A] = fa.lower
+  }
 }
 
 abstract class LowPriorityImplicits {

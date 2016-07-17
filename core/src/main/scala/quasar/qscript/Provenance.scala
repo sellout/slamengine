@@ -17,7 +17,6 @@
 package quasar.qscript
 
 import quasar.Predef._
-import quasar.fp._
 import quasar.qscript.MapFuncs._
 
 import matryoshka._
@@ -54,11 +53,11 @@ class Provenance[T[_[_]]: Corecursive] {
         Free.roll(MakeArray[T, Free[MapFunc[T, ?], A]](cadr)))))
 
   def joinProvenances(leftBuckets: List[FreeMap[T]], rightBuckets: List[FreeMap[T]]):
-      List[JoinFunc[T]] =
+      List[FreeMap[T]] =
     leftBuckets.alignWith(rightBuckets) {
-      case \&/.Both(l, r) => join(l.map(κ(LeftSide)), r.map(κ(RightSide)))
-      case \&/.This(l)    => join(l.map(κ(LeftSide)), NullLit())
-      case \&/.That(r)    => join(NullLit(), r.map(κ(RightSide)))
+      case \&/.Both(l, r) => join(l, r)
+      case \&/.This(l)    => join(l, NullLit())
+      case \&/.That(r)    => join(NullLit(), r)
     }
 
   def unionProvenances(leftBuckets: List[FreeMap[T]], rightBuckets: List[FreeMap[T]]):

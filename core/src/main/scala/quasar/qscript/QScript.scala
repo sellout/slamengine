@@ -133,8 +133,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       ZipperAcc(Nil, sides, tails).left
   }
 
-  type MergeComponent = (FreeMap[T], Ann[T], FreeQS[T])
-  type MergeResult = (T[Target], MergeComponent, MergeComponent)
+  type MergeResult = (T[Target], Free[Target, Unit], Free[Target, Unit])
 
   def merge(left: T[Target], right: T[Target]): MergeResult = {
     val lLin: Envs = left.cata(linearizeEnv).reverse
@@ -145,37 +144,18 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         (ZipperSides(UnitF[T], UnitF[T]), ZipperTails(lLin, rLin)))(
         consZipped, zipper)
 
-    val leftF: Free[F, Unit] =
+    val leftF =
       foldIso(CoEnv.freeIso[Unit, Target])
-        .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
-        new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
-      }
+        .get(lTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_))))
 
-    val rightF: Free[F, Unit] =
+    val rightF =
       foldIso(CoEnv.freeIso[Unit, Target])
-        .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_)))).mapSuspension {
-        new (Target ~> F) { def apply[A](fa: Target[A]): F[A] = fa.lower }
-      }
+        .get(rTail.reverse.ana[T, CoEnv[Unit, Target, ?]](delinearizeTargets[F, Unit] >>> (CoEnv(_))))
 
     val commonSrc: T[Target] =
       common.reverse.ana[T, Target](delinearizeInner)
 
-    // TODO totally wrong!!!!!!!!!!!!!
-
-    val leftAccess: MergeComponent = (
-      UnitF[T],
-      EmptyAnn[T],
-      leftF.mapSuspension(FI))
-
-    val rightAccess: MergeComponent = (
-      UnitF[T],
-      EmptyAnn[T],
-      rightF.mapSuspension(FI))
-
-    (commonSrc, leftAccess, rightAccess)
-
-    //rebase(leftRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], lMap)))))),
-    //rebase(rightRev, Free.roll(EnvT((EmptyAnn, QC.inj(Map(().point[Free[Target, ?]], rMap)))))))
+    (commonSrc, leftF, rightF)
   }
 
   /** This unifies a pair of sources into a single one, with additional
@@ -183,8 +163,34 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     * right values.
     */
   def autojoin(left: T[Target], right: T[Target]):
-      (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T]) =
-    ??? // TODO
+      (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T]) = {
+    val (src, lfree, rfree) = merge(left, right)
+    val lcomp = lfree.resume
+    val rcomp = rfree.resume
+    val (combine, lacc, racc) =
+      concat[T, JoinSide](Free.point(LeftSide), Free.point(RightSide))
+
+    def someAnn[A](v: Target[Free[Target, A]] \/ A) =
+      v.fold(_.ask, κ(src.project.ask))
+    val lann = someAnn(lcomp)
+    val rann = someAnn(rcomp)
+    (TJ.inj(ThetaJoin(
+      src,
+      lfree.mapSuspension(FI.compose(envtLowerNT)),
+      rfree.mapSuspension(FI.compose(envtLowerNT)),
+      // FIXME: need to compare only the portion of the identity that represents
+      //        the common src
+      Free.roll(Eq(
+        concatBuckets(lann.provenance)._1.map(κ(LeftSide)),
+        concatBuckets(rann.provenance)._1.map(κ(RightSide)))),
+      Inner,
+      combine)),
+      prov.joinProvenances(
+        lann.provenance.map(_ >> lacc),
+        rann.provenance.map(_ >> racc)),
+      lann.values >> lacc,
+      rann.values >> racc)
+  }
 
   /** A convenience for a pair of autojoins, does the same thing, but returns
     * access to all three values.

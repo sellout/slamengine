@@ -65,12 +65,12 @@ object Mergeable {
           case (-\/(left1), -\/(left2)) =>
             F.mergeSrcs(left, right, EnvT((cp1.ask, left1)), EnvT((cp2.ask, left2))).map {
               case SrcMerge(src, left, right) =>
-                SrcMerge(envtHmap(src)(FC), left, right)
+                SrcMerge(envtHmap(FC)(src), left, right)
             }
           case (\/-(right1), \/-(right2)) =>
             G.mergeSrcs(left, right, EnvT((cp1.ask, right1)), EnvT((cp2.ask, right2))).map {
               case SrcMerge(src, left, right) =>
-                SrcMerge(envtHmap(src)(GC), left, right)
+                SrcMerge(envtHmap(GC)(src), left, right)
             }
           case (_, _) => None
         }
