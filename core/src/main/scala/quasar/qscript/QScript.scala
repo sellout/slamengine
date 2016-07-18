@@ -25,7 +25,7 @@ import quasar.Planner._
 import quasar.Predef._
 import quasar.std.StdLib._
 
-import matryoshka._, Recursive.ops._
+import matryoshka._, Recursive.ops._, FunctorT.ops._
 import matryoshka.patterns._
 import scalaz.{:+: => _, Divide => _, _}, Scalaz._, Inject._, Leibniz._
 import shapeless.{Fin, nat, Sized}
@@ -55,7 +55,7 @@ trait Helpers[T[_[_]]] {
 
 // TODO: Could maybe require only Functor[F], once CoEnv exposes the proper
 //       instances
-class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
+class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: Traverse: Normalizable](
   implicit DE: Const[DeadEnd, ?] :<: F,
            SP: SourcedPathable[T, ?] :<: F,
            QC: QScriptCore[T, ?] :<: F,
@@ -64,7 +64,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
            // TODO: Remove this one once we have multi-sorted AST
            FI: F :<: QScriptProject[T, ?],
            mergeable:  Mergeable.Aux[T, F],
-           eq:         Delay[Equal, F])
+           eq:         Delay[Equal, F],
+           show:       Delay[Show, F])
     extends Helpers[T] {
 
   val prov = new Provenance[T]
@@ -375,33 +376,46 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   def invokeThetaJoin(
     values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
-      TargetT = {
-    val (sidesSrc, leftSide, rightSide) = merge(values(0), values(1))
-    val (commonSrc, sideAccess, condAccess) = merge(sidesSrc, values(2))
+      PlannerError \/ TargetT = {
+    val condError: PlannerError \/ JoinFunc[T] =
+      // FIXME: This won’t work where we join a collection against itself
+      TJ.prj(values(2).transCata[F](_.lower).transCata((new Optimize[T]).applyAll[F]).project).fold(
+        (InternalError("non theta join condition found"): PlannerError).left[JoinFunc[T]])(
+        _.combine.right[PlannerError])
 
-    val left0 = rebase(sideAccess, leftSide)
-    val right0 = rebase(sideAccess, rightSide)
+    // NB: This is a magic structure. Improve LP to not imply this structure.
+    val combine: JoinFunc[T] = Free.roll(ConcatMaps(
+      Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
+      Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
 
-    val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), UnitF[T]))
-    val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), UnitF[T]))
+    //scala.Predef.implicitly[Show[F[Unit]]]
+    //scala.Predef.implicitly[Delay[Show, F]]
+    //scala.Predef.implicitly[Show[EnvT[Unit, F, Unit]]]
+    println(s">>>>>> join cond: ${values(2).project.run.show}")
 
-    val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
-      concat(
-        UnitF[T],
-        // NB: This is a magic structure. Improve LP to not imply this structure.
-        Free.roll(ConcatMaps(
-          Free.roll(MakeMap(StrLit[T, Unit]("left"), UnitF[T])),//Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-          Free.roll(MakeMap(StrLit[T, Unit]("right"), UnitF[T]))))) //Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
+    condError.map { cond =>
+      val (commonSrc, leftSide, rightSide) = merge(values(0), values(1))
+      val Ann(leftBuckets, leftValue) = leftSide.resume.fold(_.ask, _ => EmptyAnn[T])
+      val Ann(rightBuckets, rightValue) = leftSide.resume.fold(_.ask, _ => EmptyAnn[T])
 
-    EnvT((
-      EmptyAnn[T],//Ann[T](newBucks.map(_ >> buckAccess), valAccess),
-      TJ.inj(ThetaJoin(
-        commonSrc,
-        Free.roll(left).mapSuspension(FI),
-        Free.roll(right).mapSuspension(FI),
-        equiJF,
-        tpe,
-        equiJF))))
+      val buckets: List[FreeMap[T]] =
+        prov.joinProvenances(leftBuckets, rightBuckets)
+
+      // cond >>= {
+      //   case LeftSide => leftValue.map(κ(LeftSide))
+      //   case RightSide => rightValue.map(κ(RightSide))
+      // }
+
+      EnvT((
+        Ann[T](buckets, UnitF[T]),
+        TJ.inj(ThetaJoin(
+          commonSrc,
+          leftSide.mapSuspension(FI.compose(envtLowerNT)),
+          rightSide.mapSuspension(FI.compose(envtLowerNT)),
+          cond,
+          tpe,
+          combine))))
+     }
    }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
@@ -613,15 +627,14 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Transformation =>
-      def invoke(tpe: JoinType) =
-        invokeThetaJoin(Func.Input3(a1, a2, a3), tpe).right
-
-      func match {
-        case set.InnerJoin      => invoke(Inner)
-        case set.LeftOuterJoin  => invoke(LeftOuter)
-        case set.RightOuterJoin => invoke(RightOuter)
-        case set.FullOuterJoin  => invoke(FullOuter)
-      }
+      invokeThetaJoin(
+        Func.Input3(a1, a2, a3),
+        func match {
+          case set.InnerJoin      => Inner
+          case set.LeftOuterJoin  => LeftOuter
+          case set.RightOuterJoin => RightOuter
+          case set.FullOuterJoin  => FullOuter
+        })
   }
 }
 

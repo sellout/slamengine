@@ -88,6 +88,9 @@ package object qscript extends LowPriorityImplicits {
   object Ann {
     implicit def equal[T[_[_]]: EqualT]: Equal[Ann[T]] =
       Equal.equal((a, b) => a.provenance ≟ b.provenance && a.values ≟ b.values)
+
+    implicit def show[T[_[_]]: ShowT]: Show[Ann[T]] =
+      Show.show(ann => Cord("Ann(") ++ ann.provenance.show ++ Cord(", ") ++ ann.values.show ++ Cord(")"))
   }
 
   def EmptyAnn[T[_[_]]]: Ann[T] = Ann[T](Nil, UnitF[T])
@@ -131,6 +134,15 @@ package object qscript extends LowPriorityImplicits {
         }
     }
 
+  implicit def envtShow[E: Show, F[_]](implicit F: Delay[Show, F]):
+      Delay[Show, EnvT[E, F, ?]] =
+    new Delay[Show, EnvT[E, F, ?]] {
+      def apply[A](sh: Show[A]) =
+        Show.show {
+          envt => Cord("EnvT(") ++ envt.ask.show ++ Cord(", ") ++ F(sh).show(envt.lower) ++ Cord(")")
+        }
+    }
+
   def envtHmap[F[_], G[_], E, A](f: F ~> G): EnvT[E, F, ?] ~> EnvT[E, G, ?] =
     new (EnvT[E, F, ?] ~> EnvT[E, G, ?]) {
       def apply[A](env: EnvT[E, F, A]) = EnvT((env.ask, f(env.lower)))
@@ -147,3 +159,4 @@ abstract class LowPriorityImplicits {
   implicit def coenvTraverse[F[_]: Traverse, E]: Traverse[CoEnv[E, F, ?]] =
     CoEnv.bitraverse[F, Unit].rightTraverse
 }
+
