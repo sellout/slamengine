@@ -432,6 +432,8 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
       Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
 
+    println(s">>>>>> left: ${values(0).project.run.show}")
+    println(s">>>>>> right: ${values(1).project.run.show}")
     println(s">>>>>> join cond: ${values(2).project.run.show}")
 
     condError.map { cond =>
