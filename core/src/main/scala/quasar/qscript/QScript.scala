@@ -165,16 +165,22 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T]) = {
 
     val (src, lMap, rMap, lBranch, rBranch) = res
+
+    def rebaseBranch(br: Free[Target, Unit], fm: FreeMap[T]):
+        Free[Target, Unit] =
+      if (fm ≟ Free.point(()))
+        br
+      else
+        br >> Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), fm)))))
+
     if (lBranch ≟ Free.point(()) && rBranch ≟ Free.point(())) {
       val (buck, newBucks) = concatBuckets(src.project.ask.provenance)
       val (mf, baccess, laccess, raccess) = concat3(buck, lMap, rMap)
       (QC.inj(Map(src, mf)), newBucks.map(_ >> baccess), laccess, raccess)
     } else {
-      ap(src,
-        lBranch,  //>>
-          //Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), lMap))))),
-        rBranch) //>>
-          //Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), rMap))))))
+      val leftRebase = rebaseBranch(lBranch, lMap)
+      val rightRebase = rebaseBranch(rBranch, rMap)
+      ap(src, leftRebase, rightRebase)
     }
   }
 
@@ -426,9 +432,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
       Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
 
-    //scala.Predef.implicitly[Show[F[Unit]]]
-    //scala.Predef.implicitly[Delay[Show, F]]
-    //scala.Predef.implicitly[Show[EnvT[Unit, F, Unit]]]
     println(s">>>>>> join cond: ${values(2).project.run.show}")
 
     condError.map { cond =>
