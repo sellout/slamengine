@@ -171,10 +171,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       (QC.inj(Map(src, mf)), newBucks.map(_ >> baccess), laccess, raccess)
     } else {
       ap(src,
-        lBranch  >>
-          Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), lMap))))),
-        rBranch >>
-          Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), rMap))))))
+        lBranch,  //>>
+          //Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), lMap))))),
+        rBranch) //>>
+          //Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), rMap))))))
     }
   }
 
