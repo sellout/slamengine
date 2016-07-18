@@ -92,12 +92,14 @@ object ThetaJoin {
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
       Normalizable[ThetaJoin[T, ?]] =
     new Normalizable[ThetaJoin[T, ?]] {
+      val opt = new Optimize[T]
+
       def normalize = new (ThetaJoin[T, ?] ~> ThetaJoin[T, ?]) {
         def apply[A](tj: ThetaJoin[T, A]) =
           ThetaJoin(
             tj.src,
-            tj.lBranch.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
-            tj.rBranch.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
+            tj.lBranch.mapSuspension(opt.applyToFreeQS),
+            tj.rBranch.mapSuspension(opt.applyToFreeQS),
             normalizeMapFunc(tj.on),
             tj.f,
             normalizeMapFunc(tj.combine))

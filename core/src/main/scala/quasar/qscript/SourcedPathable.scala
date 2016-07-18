@@ -112,10 +112,17 @@ object SourcedPathable {
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
       Normalizable[SourcedPathable[T, ?]] =
     new Normalizable[SourcedPathable[T, ?]] {
+      val opt = new Optimize[T]
+
       def normalize = new (SourcedPathable[T, ?] ~> SourcedPathable[T, ?]) {
         def apply[A](sp: SourcedPathable[T, A]) = sp match {
-          case LeftShift(src, s, r) => LeftShift(src, normalizeMapFunc(s), normalizeMapFunc(r))
-          case Union(src, l, r) => Union(src, l.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize), r.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize))
+          case LeftShift(src, s, r) =>
+            LeftShift(src, normalizeMapFunc(s), normalizeMapFunc(r))
+          case Union(src, l, r) =>
+            Union(
+              src,
+              l.mapSuspension(opt.applyToFreeQS),
+              r.mapSuspension(opt.applyToFreeQS))
         }
       }
     }

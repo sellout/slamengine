@@ -369,9 +369,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     }
   }
 
-  def invokeThetaJoin(
-    values: Func.Input[T[Target], nat._3],
-    tpe: JoinType):
+  def invokeThetaJoin(values: Func.Input[T[Target], nat._3], tpe: JoinType):
       TargetT = ??? // {
   //   val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
   //   val (buck, newBucks) = concatBuckets(buckets)
@@ -641,13 +639,43 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     case x                          => QC.inj(x)
   }
 
+  // FIXME: This really needs to ensure that the condition is that of an
+  //        autojoin, otherwise it’ll elide things that are truly meaningful.
   def elideNopJoin[F[_]](
-    implicit Th: ThetaJoin[T, ?] :<: F, QC: QScriptCore[T, ?] :<: F):
+    implicit TJ: ThetaJoin[T, ?] :<: F, QC: QScriptCore[T, ?] :<: F, FI: F :<: QScriptProject[T, ?]):
       ThetaJoin[T, T[F]] => F[T[F]] = {
-    case ThetaJoin(src, l, r, on, _, combine)
+    case ThetaJoin(src, l, r, on, Inner, combine)
         if l ≟ Free.point(()) && r ≟ Free.point(()) && on ≟ equiJF =>
       QC.inj(Map(src, combine.void))
-    case x => Th.inj(x)
+    case x @ ThetaJoin(src, l, r, on, _, combine) if on ≟ BoolLit(true) =>
+      (l.resume.leftMap(_.map(_.resume)), r.resume.leftMap(_.map(_.resume))) match {
+        case (-\/(m1), -\/(m2)) => (FI.prj(m1) >>= QC.prj, FI.prj(m2) >>= QC.prj) match {
+          case (Some(Map(\/-(()), mf1)), Some(Map(\/-(()), mf2))) =>
+            QC.inj(Map(src, combine >>= {
+              case LeftSide  => mf1
+              case RightSide => mf2
+            }))
+          case (_, _) => TJ.inj(x)
+        }
+        case (-\/(m1), \/-(())) => (FI.prj(m1) >>= QC.prj) match {
+          case Some(Map(\/-(()), mf1)) =>
+            QC.inj(Map(src, combine >>= {
+              case LeftSide  => mf1
+              case RightSide => UnitF
+            }))
+          case _ => TJ.inj(x)
+        }
+        case (\/-(()), -\/(m2)) => (FI.prj(m2) >>= QC.prj) match {
+          case Some(Map(\/-(()), mf2)) =>
+            QC.inj(Map(src, combine >>= {
+              case LeftSide  => UnitF
+              case RightSide => mf2
+            }))
+          case _ => TJ.inj(x)
+        }
+        case (_, _) => TJ.inj(x)
+      }
+    case x => TJ.inj(x)
   }
 
   def simplifyProjections:
@@ -694,12 +722,21 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
   def applyAll[F[_]: Functor: Normalizable](
     implicit QC: QScriptCore[T, ?] :<: F,
              TJ: ThetaJoin[T, ?] :<: F,
-             PB: ProjectBucket[T, ?] :<: F):
+             PB: ProjectBucket[T, ?] :<: F,
+             FI: F :<: QScriptProject[T, ?]):
       F[T[F]] => F[T[F]] =
-    liftFG(elideNopJoin[F]) ⋙
-    liftFG(elideNopMap[F]) ⋙
-    quasar.fp.free.injectedNT[F](simplifyProjections) ⋙
+    (quasar.fp.free.injectedNT[F](simplifyProjections).apply(_: F[T[F]])) ⋙
     liftFF(coalesceMaps[F]) ⋙
     liftFG(coalesceMapJoin[F]) ⋙
-    Normalizable[F].normalize
+    Normalizable[F].normalize ⋙
+    liftFG(elideNopJoin[F]) ⋙
+    liftFG(elideNopMap[F])
+
+  def applyToFreeQS[F[_]: Functor: Normalizable](
+    implicit QC: QScriptCore[T, ?] :<: F,
+             TJ: ThetaJoin[T, ?] :<: F,
+             PB: ProjectBucket[T, ?] :<: F):
+      F ~> F =
+    quasar.fp.free.injectedNT[F](simplifyProjections).compose(
+      Normalizable[F].normalize)
 }

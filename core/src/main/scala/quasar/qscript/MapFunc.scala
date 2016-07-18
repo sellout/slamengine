@@ -59,7 +59,6 @@ object MapFunc {
 
     def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive, A](args: List[T[CoEnv[A, MapFunc[T2, ?], ?]]]):
         CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]] = {
-      scala.Predef.println(s"concatarrays apply $args")
       args.toList match {
         case h :: t => t.foldLeft(h)((a, b) => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]((ConcatArrays(a, b): MapFunc[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]]).right).embed).project
         case Nil    => CoEnv(\/-(Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(ejson.Arr[T2[EJson]](Nil)).embed)))
@@ -79,7 +78,7 @@ object MapFunc {
             //scala.Predef.println(s">>>>concat arrays")
             (unapply(h.project).getOrElse(List(h)) ++
               unapply(t.project).getOrElse(List(t))).some
-          case x => {scala.Predef.println(s"hit unapply none case with $x"); None }
+          case _ => None
         })
 
   }
@@ -93,7 +92,6 @@ object MapFunc {
 
     def apply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Corecursive, A](args: List[T[CoEnv[A, MapFunc[T2, ?], ?]]]):
         CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]] = {
-      scala.Predef.println(s"concatmaps apply $args")
       args.toList match {
         case h :: t => t.foldLeft(h)((a, b) => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]((ConcatMaps(a, b): MapFunc[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]]).right).embed).project
         case Nil    => CoEnv(\/-(Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(ejson.Arr[T2[EJson]](Nil)).embed)))
@@ -113,7 +111,7 @@ object MapFunc {
             //scala.Predef.println(s">>>>concat maps")
             (unapply(h.project).getOrElse(List(h)) ++
               unapply(t.project).getOrElse(List(t))).some
-          case x => {scala.Predef.println(s"hit unapply none case with $x"); None }
+          case _ => None
         })
   }
 
@@ -128,7 +126,6 @@ object MapFunc {
       κ(None),
       {
         case Eq(Embed(CoEnv(\/-(Nullary(v1)))), Embed(CoEnv(\/-(Nullary(v2))))) =>
-          println("hit eq case!")
           CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](
             Nullary[T2, T[CoEnv[A, MapFunc[T2, ?], ?]]](CommonEJson.inj(
               ejson.Bool[T2[EJson]](v1 ≟ v2)).embed).right).some
@@ -504,6 +501,19 @@ object MapFuncs {
       }
       case _ => false
     }, _ => false)
+  }
+
+  object BoolLit {
+    def apply[T[_[_]]: Corecursive, A](b: Boolean): Free[MapFunc[T, ?], A] =
+      Free.roll(Nullary[T, Free[MapFunc[T, ?], A]](CommonEJson.inj(ejson.Bool[T[EJson]](b)).embed))
+
+    def unapply[T[_[_]]: Recursive, A](mf: Free[MapFunc[T, ?], A]): Option[Boolean] = mf.resume.fold ({
+      case Nullary(ej) => CommonEJson.prj(ej.project).flatMap {
+        case ejson.Bool(b) => b.some
+        case _ => None
+      }
+      case _ => None
+    }, _ => None)
   }
 
   object IntLit {

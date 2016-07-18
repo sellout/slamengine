@@ -189,6 +189,8 @@ object QScriptCore {
   implicit def normalizable[T[_[_]]: Recursive: Corecursive: EqualT]:
       Normalizable[QScriptCore[T, ?]] =
     new Normalizable[QScriptCore[T, ?]] {
+      val opt = new Optimize[T]
+
       def normalize = new (QScriptCore[T, ?] ~> QScriptCore[T, ?]) {
         def apply[A](qc: QScriptCore[T, A]) = qc match {
           case Map(src, f) => Map(src, normalizeMapFunc(f))
@@ -200,13 +202,13 @@ object QScriptCore {
           case Take(src, from, count) =>
             Take(
               src,
-              from.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
-              count.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize))
+              from.mapSuspension(opt.applyToFreeQS),
+              count.mapSuspension(opt.applyToFreeQS))
           case Drop(src, from, count) =>
             Drop(
               src,
-              from.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize),
-              count.mapSuspension(Normalizable[QScriptProject[T, ?]].normalize))
+              from.mapSuspension(opt.applyToFreeQS),
+              count.mapSuspension(opt.applyToFreeQS))
         }
       }
     }

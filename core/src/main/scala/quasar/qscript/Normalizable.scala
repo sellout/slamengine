@@ -37,17 +37,12 @@ import simulacrum.typeclass
 }
 
 trait NormalizableInstances {
-  /** This case matches _everything_. I.e., if something _isn’t_ normalizable,
-    * then normalization is identity.
-    */
-  def default[F[_]]: Normalizable[F] = new Normalizable[F] {
-    def normalize = new (F ~> F) {
-      def apply[A](sp: F[A]) = sp
-    }
-  }
-
   implicit def const[A]: Normalizable[Const[A, ?]] =
-    Normalizable.default[Const[A, ?]]
+    new Normalizable[Const[A, ?]] {
+      def normalize = new (Const[A, ?] ~> Const[A, ?]) {
+        def apply[B](const: Const[A, B]) = const
+      }
+    }
 
   implicit def coproduct[F[_], G[_]](
     implicit F: Normalizable[F], G: Normalizable[G]):
