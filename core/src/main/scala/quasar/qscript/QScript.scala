@@ -350,7 +350,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
       TargetT = {
-    val EnvT((Ann(provs, reduce), src)): TargetT = values(0).project
+    val Ann(provs, reduce) = values(0).project.ask
     // NB: If there’s no provenance, then there’s nothing to reduce. We’re
     //     already holding a single value.
     provs.tailOption.fold(values(0).project) { tail =>
@@ -361,7 +361,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           provAccess.map(_ >> Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](0)))),
           Free.roll(ProjectIndex(UnitF[T], IntLit[T, Unit](1)))),
         QC.inj(Reduce[T, T[Target], nat._1](
-          EnvT((EmptyAnn[T], src)).embed,
+          values(0),
           newProvs,
           Sized[List](
             ReduceFuncs.Arbitrary(newProvs),
@@ -375,29 +375,33 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
   def invokeThetaJoin(
     values: Func.Input[T[Target], nat._3],
     tpe: JoinType):
-      TargetT = { ??? // TODO
-    //val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
-    //val (buck, newBucks) = concatBuckets(buckets)
+      TargetT = {
+    val (sidesSrc, leftSide, rightSide) = merge(values(0), values(1))
+    val (commonSrc, sideAccess, condAccess) = merge(sidesSrc, values(2))
 
-    //val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lBranch))
-    //val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rBranch))
+    val left0 = rebase(sideAccess, leftSide)
+    val right0 = rebase(sideAccess, rightSide)
 
-    //val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
-    //  concat(
-    //    buck: FreeMap[T],
-    //    Free.roll(ConcatMaps(
-    //      Free.roll(MakeMap(StrLit[T, Unit]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-    //      Free.roll(MakeMap(StrLit[T, Unit]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
+    val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), UnitF[T]))
+    val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), UnitF[T]))
 
-    //EnvT((
-    //  Ann[T](newBucks.map(_ >> buckAccess), valAccess),
-    //  TJ.inj(ThetaJoin(
-    //    EnvT((EmptyAnn[T], src)).embed,
-    //    Free.roll(left).mapSuspension(FI),
-    //    Free.roll(right).mapSuspension(FI),
-    //    cond,
-    //    tpe,
-    //    concatted))))
+    val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
+      concat(
+        UnitF[T],
+        // NB: This is a magic structure. Improve LP to not imply this structure.
+        Free.roll(ConcatMaps(
+          Free.roll(MakeMap(StrLit[T, Unit]("left"), UnitF[T])),//Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
+          Free.roll(MakeMap(StrLit[T, Unit]("right"), UnitF[T]))))) //Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
+
+    EnvT((
+      EmptyAnn[T],//Ann[T](newBucks.map(_ >> buckAccess), valAccess),
+      TJ.inj(ThetaJoin(
+        commonSrc,
+        Free.roll(left).mapSuspension(FI),
+        Free.roll(right).mapSuspension(FI),
+        equiJF,
+        tpe,
+        equiJF))))
    }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
@@ -414,12 +418,11 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
         ProjectTarget(pathToProj(p), StrLit(n.fold(_.value, _.value)))
     }
 
-  // TODO error handling
-  def fromData[T[_[_]]: Corecursive](data: Data): String \/ T[EJson] = {
-    data.hyloM[String \/ ?, CoEnv[Data, EJson, ?], T[EJson]](
-      interpretM[String \/ ?, EJson, Data, T[EJson]](
-        _.toString.left[T[EJson]],
-        _.embed.right[String]),
+  def fromData[T[_[_]]: Corecursive](data: Data): PlannerError \/ T[EJson] = {
+    data.hyloM[PlannerError \/ ?, CoEnv[Data, EJson, ?], T[EJson]](
+      interpretM[PlannerError \/ ?, EJson, Data, T[EJson]](
+        NonRepresentableData(_).left,
+        _.embed.right[PlannerError]),
       Data.toEJson[EJson].apply(_).right)
   }
 
@@ -429,12 +432,12 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
       pathToProj(path).right
 
     case LogicalPlan.ConstantF(data) =>
-      val res = QC.inj(Map(
-        RootTarget.embed,
-        Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](fromData(data).fold(
-          error => CommonEJson.inj(ejson.Str[T[EJson]](error)).embed,
-          ι)))))
-        EnvT((EmptyAnn[T], res)).right
+      fromData(data).map(d =>
+        EnvT((
+          EmptyAnn[T],
+          QC.inj(Map(
+            RootTarget.embed,
+            Free.roll[MapFunc[T, ?], Unit](Nullary[T, FreeMap[T]](d)))))))
 
     case LogicalPlan.FreeF(name) =>
       (Planner.UnboundVariable(name): PlannerError).left[TargetT]
@@ -745,3 +748,4 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT] extends Helpers[T] {
     quasar.fp.free.injectedNT[F](simplifyProjections).compose(
       Normalizable[F].normalize)
 }
+
