@@ -134,7 +134,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       ZipperAcc(Nil, sides, tails).left
   }
 
-  type MergeResult = (T[Target], Free[Target, Unit], Free[Target, Unit])
+  type MergeResult = (T[Target], FreeMap[T], FreeMap[T], Free[Target, Unit], Free[Target, Unit])
 
   def merge(left: T[Target], right: T[Target]): MergeResult = {
     val lLin: Envs = left.cata(linearizeEnv).reverse
@@ -156,8 +156,41 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
     val commonSrc: T[Target] =
       common.reverse.ana[T, Target](delinearizeInner)
 
-    (commonSrc, leftF, rightF)
+    (commonSrc, lMap, rMap, leftF, rightF)
   }
+
+  def useMerge(
+    res: MergeResult,
+    ap: (T[Target], Free[Target, Unit], Free[Target, Unit]) => (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T])):
+      (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T]) = {
+
+    val (src, lMap, rMap, lBranch, rBranch) = res
+    if (lBranch ≟ Free.point(()) && rBranch ≟ Free.point(())) {
+      val (buck, newBucks) = concatBuckets(src.project.ask.provenance)
+      val (mf, baccess, laccess, raccess) = concat3(buck, lMap, rMap)
+      (QC.inj(Map(src, mf)), newBucks.map(_ >> baccess), laccess, raccess)
+    } else {
+      ap(src,
+        lBranch  >>
+          Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), lMap))))),
+        rBranch >>
+          Free.roll(EnvT((EmptyAnn[T], QC.inj(Map(Free.point[Target, Unit](()), rMap))))))
+    }
+  }
+
+  // foo.bar
+  // foo\bar
+
+  // foo.bar + foo.baz //  MF
+
+  // foo\bar[*] + foo\baz[*] // TJ
+
+  // TJ(foo, BucketField(bar), BucketField(baz) … Add(LS, RS))
+
+
+  // /foo/bar/baz.quux + /foo/bar/baz.zub
+
+  // select sum(baz), quux.name from \foo\bar as bar join \foo\quux as quux on bar.parent = quux.name
 
   def someAnn[A](
     v: Target[Free[Target, A]] \/ A,
@@ -165,37 +198,42 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       Ann[T] =
     v.fold(_.ask, κ(default.project.ask))
 
+// CoEnv[Unit, EnvT[Ann, F, ?], ?]
+// EnvT[Ann, CoAnn[Unit, F, ?], ?]
+
   /** This unifies a pair of sources into a single one, with additional
     * expressions to access the combined bucketing info, as well as the left and
     * right values.
     */
   def autojoin(left: T[Target], right: T[Target]):
       (F[T[Target]], List[FreeMap[T]], FreeMap[T], FreeMap[T]) = {
-    val (src, lfree, rfree) = merge(left, right)
-    val lcomp = lfree.resume
-    val rcomp = rfree.resume
-    val (combine, lacc, racc) =
-      concat[T, JoinSide](Free.point(LeftSide), Free.point(RightSide))
+    useMerge(merge(left, right), (src, lBranch, rBranch) => {
+      val lcomp = lBranch.resume
+      val rcomp = rBranch.resume
+      val (combine, lacc, racc) =
+        concat[T, JoinSide](Free.point(LeftSide), Free.point(RightSide))
 
-    val lann = someAnn(lcomp, src)
-    val rann = someAnn(rcomp, src)
-    val commonProvLength = src.project.ask.provenance.length
-    (TJ.inj(ThetaJoin(
-      src,
-      lfree.mapSuspension(FI.compose(envtLowerNT)),
-      rfree.mapSuspension(FI.compose(envtLowerNT)),
-      // FIXME: not quite right – e.g., if there is a reduction in a branch the
-      //        condition won’t line up.
-      Free.roll(Eq(
-        concatBuckets(lann.provenance.drop(lann.provenance.length - commonProvLength))._1.map(κ(LeftSide)),
-        concatBuckets(rann.provenance.drop(rann.provenance.length - commonProvLength))._1.map(κ(RightSide)))),
-      Inner,
-      combine)),
-      prov.joinProvenances(
-        lann.provenance.map(_ >> lacc),
-        rann.provenance.map(_ >> racc)),
-      lann.values >> lacc,
-      rann.values >> racc)
+      val lann = someAnn(lcomp, src)
+      val rann = someAnn(rcomp, src)
+      val commonProvLength = src.project.ask.provenance.length
+
+      (TJ.inj(ThetaJoin(
+        src,
+        lBranch.mapSuspension(FI.compose(envtLowerNT)),
+        rBranch.mapSuspension(FI.compose(envtLowerNT)),
+        // FIXME: not quite right – e.g., if there is a reduction in a branch the
+        //        condition won’t line up.
+        Free.roll(Eq(
+          concatBuckets(lann.provenance.drop(lann.provenance.length - commonProvLength))._1.map(κ(LeftSide)),
+          concatBuckets(rann.provenance.drop(rann.provenance.length - commonProvLength))._1.map(κ(RightSide)))),
+        Inner,
+        combine)),
+        prov.joinProvenances(
+          lann.provenance.map(_ >> lacc),
+          rann.provenance.map(_ >> racc)),
+        lann.values >> lacc,
+        rann.values >> racc)
+    })
   }
 
   /** A convenience for a pair of autojoins, does the same thing, but returns
@@ -394,7 +432,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
     println(s">>>>>> join cond: ${values(2).project.run.show}")
 
     condError.map { cond =>
-      val (commonSrc, leftSide, rightSide) = merge(values(0), values(1))
+      val (commonSrc, lMap, rMap, leftSide, rightSide) = merge(values(0), values(1))
       val Ann(leftBuckets, leftValue) = leftSide.resume.fold(_.ask, _ => EmptyAnn[T])
       val Ann(rightBuckets, rightValue) = leftSide.resume.fold(_.ask, _ => EmptyAnn[T])
 
@@ -410,8 +448,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
         Ann[T](buckets, UnitF[T]),
         TJ.inj(ThetaJoin(
           commonSrc,
-          leftSide.mapSuspension(FI.compose(envtLowerNT)),
-          rightSide.mapSuspension(FI.compose(envtLowerNT)),
+          leftSide.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), lMap)))),
+          rightSide.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), rMap)))),
           cond,
           tpe,
           combine))))
@@ -589,38 +629,45 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       invokeExpansion2(func, Func.Input2(a1, a2)).right
 
     case LogicalPlan.InvokeFUnapply(set.GroupBy, Sized(a1, a2)) => ??? // TODO
+
     case LogicalPlan.InvokeFUnapply(set.Union, Sized(a1, a2)) =>
-      val (src, lfree, rfree) = merge(a1, a2)
-      EnvT((
-        Ann(
+      val (qs, buckets, lacc, racc) = useMerge(merge(a1, a2), (src, lfree, rfree) => {
+        (SP.inj(Union(src,
+          lfree.mapSuspension(FI.compose(envtLowerNT)),
+          rfree.mapSuspension(FI.compose(envtLowerNT)))),
           prov.unionProvenances(
             someAnn(lfree.resume, src).provenance,
             someAnn(rfree.resume, src).provenance),
-          UnitF), // FIXME: Not UnitF
-        SP.inj(Union(src,
-          lfree.mapSuspension(FI.compose(envtLowerNT)),
-          rfree.mapSuspension(FI.compose(envtLowerNT)))))).right
+          UnitF,
+          UnitF)
+      })
+
+      EnvT((Ann(buckets, UnitF), qs)).right
 
     case LogicalPlan.InvokeFUnapply(set.Intersect, Sized(a1, a2)) =>
-      val (src, left, right) = merge(a1, a2)
+      val (src, lMap, rMap, left, right) = merge(a1, a2)
       EnvT((
         src.project.ask,
         TJ.inj(ThetaJoin(
           src,
-          left.mapSuspension(FI.compose(envtLowerNT)),
-          right.mapSuspension(FI.compose(envtLowerNT)),
+          left.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), lMap)))),
+          right.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), rMap)))),
           equiJF,
           Inner,
           Free.point(LeftSide))))).right
 
     case LogicalPlan.InvokeFUnapply(set.Except, Sized(a1, a2)) =>
-      val (src, left, right) = merge(a1, a2)
+      val (src, lMap, rMap, left, right) = merge(a1, a2)
       EnvT((
         src.project.ask, // TODO is this the correct provenance?
         TJ.inj(ThetaJoin(
           src,
-          left.mapSuspension(FI.compose(envtLowerNT)),
-          right.mapSuspension(FI.compose(envtLowerNT)),
+          left.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), lMap)))),
+          right.mapSuspension(FI.compose(envtLowerNT)) >>
+            Free.roll(FI.inj(QC.inj(Map(Free.point[QScriptProject[T, ?], Unit](()), rMap)))),
           Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
           LeftOuter,
           Free.point(LeftSide))))).right
