@@ -158,7 +158,10 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     (commonSrc, leftF, rightF)
   }
 
-  def someAnn[A](v: Target[Free[Target, A]] \/ A, default: T[Target]) =
+  def someAnn[A](
+    v: Target[Free[Target, A]] \/ A,
+    default: T[Target]):
+      Ann[T] =
     v.fold(_.ask, κ(default.project.ask))
 
   /** This unifies a pair of sources into a single one, with additional
@@ -369,31 +372,33 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
     }
   }
 
-  def invokeThetaJoin(values: Func.Input[T[Target], nat._3], tpe: JoinType):
-      TargetT = ??? // {
-  //   val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
-  //   val (buck, newBucks) = concatBuckets(buckets)
+  def invokeThetaJoin(
+    values: Func.Input[T[Target], nat._3],
+    tpe: JoinType):
+      TargetT = { ??? // TODO
+    //val (src, buckets, lBranch, rBranch, cond) = autojoin3(values(0), values(1), values(2))
+    //val (buck, newBucks) = concatBuckets(buckets)
 
-  //   val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lBranch))
-  //   val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rBranch))
+    //val left: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), lBranch))
+    //val right: F[Free[F, Unit]] = QC.inj(Map[T, Free[F, Unit]](Free.point[F, Unit](()), rBranch))
 
-  //   val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
-  //     concat(
-  //       buck: FreeMap[T],
-  //       Free.roll(ConcatMaps(
-  //         Free.roll(MakeMap(StrLit[T, JoinSide]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
-  //         Free.roll(MakeMap(StrLit[T, JoinSide]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
+    //val (concatted, buckAccess, valAccess): (FreeMap[T], FreeMap[T], FreeMap[T]) =
+    //  concat(
+    //    buck: FreeMap[T],
+    //    Free.roll(ConcatMaps(
+    //      Free.roll(MakeMap(StrLit[T, Unit]("left"), Free.point[MapFunc[T, ?], JoinSide](LeftSide))),
+    //      Free.roll(MakeMap(StrLit[T, Unit]("right"), Free.point[MapFunc[T, ?], JoinSide](RightSide))))))
 
-  //   EnvT((
-  //     Ann[T](newBucks.map(_ >> buckAccess), valAccess),
-  //     TJ.inj(ThetaJoin(
-  //       EnvT((EmptyAnn[T], src)).embed,
-  //       Free.roll(left).mapSuspension(FI),
-  //       Free.roll(right).mapSuspension(FI),
-  //       cond,
-  //       tpe,
-  //       concatted))))
-  // }
+    //EnvT((
+    //  Ann[T](newBucks.map(_ >> buckAccess), valAccess),
+    //  TJ.inj(ThetaJoin(
+    //    EnvT((EmptyAnn[T], src)).embed,
+    //    Free.roll(left).mapSuspension(FI),
+    //    Free.roll(right).mapSuspension(FI),
+    //    cond,
+    //    tpe,
+    //    concatted))))
+   }
 
   def ProjectTarget(prefix: TargetT, field: FreeMap[T]): TargetT = {
     val Ann(provenance, values) = prefix.ask
@@ -547,12 +552,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
             EmptyAnn[T],
             QC.inj(Filter(EnvT((EmptyAnn[T], src)).embed, rval)))).embed,
           lval)))).right
-      //mergeTheta[F[Inner]](a1, a2, {
-      //  case SrcMerge(src, fm1, fm2) =>
-      //    QC.inj(Map(
-      //      QC.inj(Filter(TJ.inj(src).embed, fm2)).embed,
-      //      fm1))
-      //})
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Squashing =>
@@ -585,26 +584,32 @@ class Transform[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, F[_]: Traverse](
           lfree.mapSuspension(FI.compose(envtLowerNT)),
           rfree.mapSuspension(FI.compose(envtLowerNT)))))).right
 
-    case LogicalPlan.InvokeFUnapply(set.Intersect, Sized(a1, a2)) => ??? // TODO
-      //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
-      //  case SrcMerge(src, jb1, jb2) =>
-      //    TJ.inj(ThetaJoin(src, jb1.mapSuspension(FI), jb2.mapSuspension(FI), equiJF, Inner, Free.point(LeftSide)))
-      //}
+    case LogicalPlan.InvokeFUnapply(set.Intersect, Sized(a1, a2)) =>
+      val (src, left, right) = merge(a1, a2)
+      EnvT((
+        src.project.ask,
+        TJ.inj(ThetaJoin(
+          src,
+          left.mapSuspension(FI.compose(envtLowerNT)),
+          right.mapSuspension(FI.compose(envtLowerNT)),
+          equiJF,
+          Inner,
+          Free.point(LeftSide))))).right
 
-    case LogicalPlan.InvokeFUnapply(set.Except, Sized(a1, a2)) => ??? // TODO
-      //merge(a1, a2).mapK(_.right[PlannerError]) ∘ {
-      //  case SrcMerge(src, jb1, jb2) =>
-      //    TJ.inj(ThetaJoin(
-      //      src,
-      //      jb1.mapSuspension(FI),
-      //      jb2.mapSuspension(FI),
-      //      Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
-      //      LeftOuter,
-      //      Free.point(LeftSide)))
-      //}
+    case LogicalPlan.InvokeFUnapply(set.Except, Sized(a1, a2)) =>
+      val (src, left, right) = merge(a1, a2)
+      EnvT((
+        src.project.ask, // TODO is this the correct provenance?
+        TJ.inj(ThetaJoin(
+          src,
+          left.mapSuspension(FI.compose(envtLowerNT)),
+          right.mapSuspension(FI.compose(envtLowerNT)),
+          Free.roll(Nullary(CommonEJson.inj(ejson.Bool[T[EJson]](false)).embed)),
+          LeftOuter,
+          Free.point(LeftSide))))).right
 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
-        if func.effect ≟ Transformation=>
+        if func.effect ≟ Transformation =>
       def invoke(tpe: JoinType) =
         invokeThetaJoin(Func.Input3(a1, a2, a3), tpe).right
 
