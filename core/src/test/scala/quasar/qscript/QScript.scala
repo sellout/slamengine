@@ -115,7 +115,19 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
             "name" -> structural.ObjectProject(
               lpRead("/city"),
               LogicalPlan.Constant(Data.Str("name")))))).toOption must
-      equal(RootR.some)
+      equal(RootR.some) // TODO incorrect expectation
+    }
+
+    "convert a shift array" in {
+      QueryFile.convertToQScript(
+        identity.Squash[FLP](
+          structural.ShiftArray[FLP](
+            structural.ArrayConcat[FLP](
+              structural.ArrayConcat[FLP](
+                structural.MakeArrayN[Fix](LogicalPlan.Constant(Data.Int(1))),
+                structural.MakeArrayN[Fix](LogicalPlan.Constant(Data.Int(2)))),
+              structural.MakeArrayN[Fix](LogicalPlan.Constant(Data.Int(3))))))).toOption must
+      equal(RootR.some) // TODO incorrect expectation
     }
 
     "convert basic join" in {  // TODO normalization
