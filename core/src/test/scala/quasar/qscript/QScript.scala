@@ -51,6 +51,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   // write an `Equal[PlannerError]` and test for specific errors too
   "replan" should {
     "convert a constant boolean" in {
+       // "select true"
        QueryFile.convertToQScript(LogicalPlan.Constant(Data.Bool(true))).toOption must
        equal(
          QC.inj(Map(RootR, BoolLit(true))).embed.some)
@@ -58,6 +59,7 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
 
     // TODO EJson does not support Data.Set
     "convert a constant set" in {
+      // "select {\"a\": 1, \"b\": 2, \"c\": 3, \"d\": 4, \"e\": 5}{*} limit 3 offset 1"
       QueryFile.convertToQScript(
         LogicalPlan.Constant(Data.Set(List(
           Data.Obj(ListMap("0" -> Data.Int(2))),
@@ -66,14 +68,20 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
          RootR.some) // TODO incorrect expectation
     }
 
-    "convert a very simple read" in {
+    "convert a simple read" in {
       QueryFile.convertToQScript(lpRead("/foo")).toOption must
       equal(
-        // Map(Root, ProjectField(Unit, "foo"))
         QC.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed.some)
     }
 
-    "convert a simple read" in {
+    "convert a squashed read" in {
+      // "select * from foo"
+      QueryFile.convertToQScript(identity.Squash(lpRead("/foo"))).toOption must
+      equal(
+        QC.inj(Map(RootR, ProjectFieldR(UnitF, StrLit("foo")))).embed.some)
+    }
+
+    "convert a simple read with path projects" in {
       QueryFile.convertToQScript(lpRead("/some/foo/bar")).toOption must
       equal(
         QC.inj(
@@ -85,8 +93,6 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
                   StrLit("some")),
                 StrLit("foo")),
               StrLit("bar")))).embed.some)
-
-      // Map(Root, ObjectProject(ObjectProject(ObjectProject((), "some"), "foo"), "bar"))
     }
 
     "convert a basic invoke" in {
