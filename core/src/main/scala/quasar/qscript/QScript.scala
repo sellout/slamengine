@@ -427,7 +427,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
       //        We only apply _some_ optimizations at this point to maintain the
       //        TJ at the end, but that‘s still not guaranteed
       TJ.prj(values(2).transCata[F](_.lower).transCata((new Optimize[T]).applyMost[F]).project).fold(
-        (InternalError(s"non theta join condition found: ${meh.shows}"): PlannerError).left[JoinFunc[T]])(
+        (InternalError("non theta join condition found"): PlannerError).left[JoinFunc[T]])(
         _.combine.right[PlannerError])
     }
 

@@ -48,6 +48,26 @@ sealed abstract class Ternary[T[_[_]], A] extends MapFunc[T, A] {
 object MapFunc {
   import MapFuncs._
 
+  object StaticArray {
+    private implicit def implicitPrio[F[_], G[_]]: Inject[G, Coproduct[F, G, ?]] = Inject.rightInjectInstance
+
+    def unapply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive, A](
+      mf: CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]):
+        Option[List[T[CoEnv[A, MapFunc[T2, ?], ?]]]] =
+      mf match {
+        case ConcatArraysN(as) =>
+          as.foldRightM[Option, List[T[CoEnv[A, MapFunc[T2, ?], ?]]]](
+            Nil)(
+            (mf, acc) => (mf.project.run.toOption >>=
+              {
+                case MakeArray(value) => (value :: acc).some
+                case Nullary(Embed(Inj(ejson.Arr(values)))) =>
+                  (values.map(v => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](Nullary(v).right).embed) ++ acc).some
+                case _ => None
+              }))
+      }
+  }
+
   // TODO subtyping is preventing embeding of MapFuncs
   object ConcatArraysN {
     private implicit def implicitPrio[F[_], G[_]]: Inject[G, Coproduct[F, G, ?]] = Inject.rightInjectInstance
