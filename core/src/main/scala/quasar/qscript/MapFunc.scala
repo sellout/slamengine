@@ -48,6 +48,9 @@ sealed abstract class Ternary[T[_[_]], A] extends MapFunc[T, A] {
 object MapFunc {
   import MapFuncs._
 
+  /** Returns a List that maps element-by-element to a MapFunc array. If we can’t
+    * statically determine _all_ of the elements, it doesn’t match.
+    */
   object StaticArray {
     private implicit def implicitPrio[F[_], G[_]]: Inject[G, Coproduct[F, G, ?]] = Inject.rightInjectInstance
 
@@ -65,6 +68,33 @@ object MapFunc {
                   (values.map(v => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](Nullary(v).right).embed) ++ acc).some
                 case _ => None
               }))
+        case _ => None
+      }
+  }
+
+  /** Like `StaticArray`, but returns as much of the array as can be statically
+    * determined. Useful if you just want to statically lookup into an array if
+    * possible, and punt otherwise.
+    */
+  object StaticArrayPrefix {
+    private implicit def implicitPrio[F[_], G[_]]: Inject[G, Coproduct[F, G, ?]] = Inject.rightInjectInstance
+
+    def unapply[T[_[_]]: Recursive: Corecursive, T2[_[_]]: Recursive, A](
+      mf: CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]]):
+        Option[List[T[CoEnv[A, MapFunc[T2, ?], ?]]]] =
+      mf match {
+        case ConcatArraysN(as) =>
+          as.foldRightM[List[T[CoEnv[A, MapFunc[T2, ?], ?]]] \/ ?, List[T[CoEnv[A, MapFunc[T2, ?], ?]]]](
+            Nil)(
+            (mf, acc) => mf.project.run.fold(
+              κ(acc.left),
+              _ match {
+                case MakeArray(value) => (value :: acc).right
+                case Nullary(Embed(Inj(ejson.Arr(values)))) =>
+                  (values.map(v => CoEnv[A, MapFunc[T2, ?], T[CoEnv[A, MapFunc[T2, ?], ?]]](Nullary(v).right).embed) ++ acc).right
+                case _ => acc.left
+              })).merge.some
+        case _ => None
       }
   }
 
