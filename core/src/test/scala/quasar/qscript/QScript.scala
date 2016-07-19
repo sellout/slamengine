@@ -50,6 +50,12 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
   // TODO instead of calling `.toOption` on the `\/`
   // write an `Equal[PlannerError]` and test for specific errors too
   "replan" should {
+    "convert a constant boolean" in {
+       QueryFile.convertToQScript(LogicalPlan.Constant(Data.Bool(true))).toOption must
+       equal(
+         QC.inj(Map(RootR, BoolLit(true))).embed.some)
+    }
+
     "convert a very simple read" in {
       QueryFile.convertToQScript(lpRead("/foo")).toOption must
       equal(
