@@ -379,14 +379,13 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
   def invokeExpansion2(func: BinaryFunc, values: Func.Input[T[Target], nat._2]):
       TargetT =
     func match {
-      // TODO left shift `freshName + range value` values onto provenance
       case set.Range =>
         val (src, buckets, lval, rval) = autojoin(values(0), values(1))
         val (bucksArray, newBucks) = concatBuckets(buckets)
         val (merged, b, v) = concat[T, Unit](bucksArray, Free.roll(Range(lval, rval)))
 
         EnvT((
-          Ann[T](/*Concat(freshName("range"), v) ::*/ newBucks.map(b >> _), v),
+          Ann[T](NullLit[T, Unit]() :: newBucks.map(b >> _), v),
           SP.inj(LeftShift(
             EnvT((EmptyAnn[T], src)).embed,
             merged,
