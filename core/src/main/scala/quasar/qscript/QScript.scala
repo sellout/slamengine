@@ -633,7 +633,9 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
         if func.effect ≟ Expansion =>
       invokeExpansion2(func, Func.Input2(a1, a2)).right
 
-    case LogicalPlan.InvokeFUnapply(set.GroupBy, Sized(a1, a2)) => ??? // TODO
+    case LogicalPlan.InvokeFUnapply(set.GroupBy, Sized(a1, a2)) =>
+      val (src, buckets, lval, rval) = autojoin(a1, a2)
+      EnvT((Ann(prov.swapProvenances(rval :: buckets), lval), src)).right
 
     case LogicalPlan.InvokeFUnapply(set.Union, Sized(a1, a2)) =>
       val (qs, buckets, lacc, racc) = useMerge(merge(a1, a2), (src, lfree, rfree) => {
