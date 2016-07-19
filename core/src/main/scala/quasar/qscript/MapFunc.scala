@@ -134,6 +134,7 @@ object MapFunc {
             if (i ≟ 0) mf match {
               // TODO: Handle the literal array case
               case Embed(CoEnv(\/-(MakeArray(Embed(value))))) => value.some.left
+              case _ => None.left
             }
             else mf match {
               case Embed(CoEnv(\/-(MakeArray(_)))) => (index - 1).right
