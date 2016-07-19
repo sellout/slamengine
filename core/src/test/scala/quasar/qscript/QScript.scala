@@ -56,6 +56,16 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
          QC.inj(Map(RootR, BoolLit(true))).embed.some)
     }
 
+    // TODO EJson does not support Data.Set
+    "convert a constant set" in {
+      QueryFile.convertToQScript(
+        LogicalPlan.Constant(Data.Set(List(
+          Data.Obj(ListMap("0" -> Data.Int(2))),
+          Data.Obj(ListMap("0" -> Data.Int(3))))))).toOption must
+      equal(
+         RootR.some) // TODO incorrect expectation
+    }
+
     "convert a very simple read" in {
       QueryFile.convertToQScript(lpRead("/foo")).toOption must
       equal(
