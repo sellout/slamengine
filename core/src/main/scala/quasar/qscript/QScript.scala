@@ -392,7 +392,6 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
             Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
     }
 
-  // TODO handle UnshiftMap and UnshiftArray differently
   def invokeReduction1(
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
@@ -540,6 +539,26 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
     case LogicalPlan.InvokeFUnapply(func @ TernaryFunc(_, _, _, _, _, _, _, _), Sized(a1, a2, a3))
         if func.effect ≟ Mapping =>
       merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func)).right[PlannerError]
+
+    case LogicalPlan.InvokeFUnapply(structural.UnshiftArray, Sized(a1)) =>
+      val Ann(provs, reduce) = a1.project.ask
+      provs.headOption.fold(a1.project.right) { head =>
+        EnvT[Ann[T], F, T[Target]]((
+          Ann[T](provs.drop(1), UnitF[T]),
+          QC.inj(Map(
+            EnvT((EmptyAnn[T], a1.project.lower)).embed,
+            Free.roll(MakeArray(head)))))).right // FIXME we need to use the actual indices from the provenance
+      }
+
+    case LogicalPlan.InvokeFUnapply(structural.UnshiftMap, Sized(a1)) =>
+      val Ann(provs, reduce) = a1.project.ask
+      provs.headOption.fold(a1.project.right) { head =>
+        EnvT[Ann[T], F, T[Target]]((
+          Ann[T](provs.drop(1), UnitF[T]),
+          QC.inj(Map(
+            EnvT((EmptyAnn[T], a1.project.lower)).embed,
+            Free.roll(MakeMap(UnitF[T], head)))))).right
+      }
 
     case LogicalPlan.InvokeFUnapply(func @ UnaryFunc(_, _, _, _, _, _, _, _), Sized(a1))
         if func.effect ≟ Reduction =>
