@@ -392,6 +392,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
             Free.point[MapFunc[T, ?], JoinSide](RightSide)))))
     }
 
+  // TODO handle UnshiftMap and UnshiftArray differently
   def invokeReduction1(
     func: UnaryFunc,
     values: Func.Input[T[Target], nat._1]):
