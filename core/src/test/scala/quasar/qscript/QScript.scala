@@ -124,6 +124,21 @@ class QScriptSpec extends CompilerHelpers with ScalazMatchers {
                 StrLit("name"))))))).embed.some)
     }
 
+    "convert a basic reduction" in {
+      QueryFile.convertToQScript(
+        agg.Sum[FLP](lpRead("/person"))).toOption must
+      equal(RootR.some) // TODO incorrect expectation
+    }
+
+    "convert a basic reduction wrapped in an object" in {
+      // "select sum(height) from person"
+      QueryFile.convertToQScript(
+        makeObj(
+          "0" ->
+            agg.Sum[FLP](structural.ObjectProject(lpRead("/person"), LogicalPlan.Constant(Data.Str("height")))))).toOption must
+      equal(RootR.some) // TODO incorrect expectation
+    }
+
     "convert a flatten array" in {
       // "select loc[:*] from zips",
       QueryFile.convertToQScript(
