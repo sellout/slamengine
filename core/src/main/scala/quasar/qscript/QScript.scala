@@ -540,16 +540,7 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
         if func.effect ≟ Mapping =>
       merge3Map(Func.Input3(a1, a2, a3))(MapFunc.translateTernaryMapping(func)).right[PlannerError]
 
-    case LogicalPlan.InvokeFUnapply(structural.UnshiftArray, Sized(a1)) =>
-      val Ann(provs, reduce) = a1.project.ask
-      provs.headOption.fold(a1.project.right) { head =>
-        EnvT[Ann[T], F, T[Target]]((
-          Ann[T](provs.drop(1), UnitF[T]),
-          QC.inj(Map(
-            EnvT((EmptyAnn[T], a1.project.lower)).embed,
-            Free.roll(MakeArray(head)))))).right // FIXME we need to use the actual indices from the provenance
-      }
-
+    // TODO this should be a binary reduction
     case LogicalPlan.InvokeFUnapply(structural.UnshiftMap, Sized(a1)) =>
       val Ann(provs, reduce) = a1.project.ask
       provs.headOption.fold(a1.project.right) { head =>
