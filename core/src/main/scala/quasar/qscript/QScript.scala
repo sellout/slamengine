@@ -821,6 +821,61 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT: ShowT] extends Helpers[T
     case x => TJ.inj(x)
   }
 
+    //freeCata(target.map(_ => src.transAna(FI)))(recover(_.embed))
+    //  .transAnaM(FI.prj)
+  def rebaseTCo[F[_]: Traverse, A](
+    target: FreeQS[T], srcCo: T[CoEnv[A, F, ?]])(
+    implicit FI: F :<: QScriptTotal[T, ?]):
+      Option[T[CoEnv[A, F, ?]]] = rebaseT(target, srcCo)
+    //srcCo.project.run.toOption >>= { rebaseT(target, _) }
+
+  def elideConstantJoinCo[F[_]: Traverse, A](
+    implicit TJ: ThetaJoin[T, ?] :<: F,
+             QC: QScriptCore[T, ?] :<: F,
+             FI: F :<: QScriptTotal[T, ?]):
+      ThetaJoin[T, T[CoEnv[A, F, ?]]] => F[T[CoEnv[A, F, ?]]] = {
+    case x @ ThetaJoin(src0, l, r, on, Inner, combine) if on ≟ BoolLit(true) =>
+      (l.resume.leftMap(_.map(_.resume)), r.resume.leftMap(_.map(_.resume))) match {
+        case (-\/(m1), -\/(m2)) => (FI.prj(m1) >>= QC.prj, FI.prj(m2) >>= QC.prj) match {
+          case (Some(Map(\/-(SrcHole), mf1)), Some(Map(\/-(SrcHole), mf2))) =>  // both sides are a Map
+            (mf1.resume, mf2.resume) match { // if both sides are Nullary, we hit the first case
+              case (-\/(Nullary(_)), _) =>
+                rebaseTCo(r, src0).map(tf => QC.inj(Map(tf, combine >>= {
+                  case LeftSide  => mf1
+                  case RightSide => HoleF
+                }))).getOrElse(TJ.inj(x))
+              case (_, -\/(Nullary(_))) =>
+                rebaseTCo(l, src0).map(tf => QC.inj(Map(tf, combine >>= {
+                  case LeftSide  => HoleF
+                  case RightSide => mf2
+                }))).getOrElse(TJ.inj(x))
+              case (_, _) => TJ.inj(x)
+            }
+          case (Some(Map(\/-(SrcHole), mf1)), _) =>  // left side is a Map
+            mf1.resume match {
+              case -\/(Nullary(_)) =>
+                rebaseTCo(r, src0).map(tf => QC.inj(Map(tf, combine >>= {
+                  case LeftSide  => mf1
+                  case RightSide => HoleF
+                }))).getOrElse(TJ.inj(x))
+              case _ => TJ.inj(x)
+            }
+          case (_, Some(Map(\/-(SrcHole), mf2))) =>  // right side is a Map
+            mf2.resume match {
+              case -\/(Nullary(_)) =>
+                rebaseTCo(l, src0).map(tf => QC.inj(Map(tf, combine >>= {
+                  case LeftSide  => HoleF
+                  case RightSide => mf2
+                }))).getOrElse(TJ.inj(x))
+              case _ => TJ.inj(x)
+            }
+          case (_, _)=> TJ.inj(x)
+        }
+        case (_, _) => TJ.inj(x)
+      }
+    case x => TJ.inj(x)
+  }
+
   def simplifyProjections:
       ProjectBucket[T, ?] ~> QScriptCore[T, ?] =
     new (ProjectBucket[T, ?] ~> QScriptCore[T, ?]) {
@@ -1023,7 +1078,7 @@ class Optimize[T[_[_]]: Recursive: Corecursive: EqualT: ShowT] extends Helpers[T
     (quasar.fp.free.injectedNT[F](simplifyProjections).apply(_: F[T[CoEnv[A, F, ?]]])) ⋙
       Normalizable[F].normalize ⋙
       quasar.fp.free.injectedNT[F](elideNopJoin[F]) ⋙
-      //liftFG(elideConstantJoin[CoEnv[A, F, ?]]) ⋙  // TODO
+      liftFG(elideConstantJoinCo[F, A]) ⋙  // TODO
       liftFF(repeatedly(coalesceQC[F, CoEnv[A, F, ?]](extractCoEnv[F, A], wrapCoEnv[F, A]))) ⋙
       liftFG(coalesceMapShift[F, CoEnv[A, F, ?]](extractCoEnv[F, A])) ⋙
       liftFG(coalesceMapJoin[F, CoEnv[A, F, ?]](extractCoEnv[F, A])) ⋙
