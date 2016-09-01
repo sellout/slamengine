@@ -523,7 +523,6 @@ object MapFuncs {
     */
   @Lenses final case class Now[T[_[_]], A]() extends Nullary[T, A]
 
-
   // math
   @Lenses final case class Negate[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class Add[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
@@ -564,8 +563,12 @@ object MapFuncs {
   @Lenses final case class Search[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
   @Lenses final case class Substring[T[_[_]], A](a1: A, a2: A, a3: A) extends Ternary[T, A]
 
-  // structural
+      // structural
+  /** Makes a single-element [[ejson.Arr]] containing `a1`.
+    */
   @Lenses final case class MakeArray[T[_[_]], A](a1: A) extends Unary[T, A]
+  /** Makes a single-element [[ejson.Map]] with key `a1` and value `a2`.
+    */
   @Lenses final case class MakeMap[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
   @Lenses final case class ConcatArrays[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]
   @Lenses final case class ConcatMaps[T[_[_]], A](a1: A, a2: A) extends Binary[T, A]

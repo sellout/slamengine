@@ -57,7 +57,7 @@ object queryfile {
                   (implicit C: DataCursor[MongoDbIO, C])
                   : QueryFile ~> MongoQuery[C, ?] = {
 
-    new QueryFileInterpreter(execMongo, MongoDbQScriptPlanner.plan[Fix])
+    new QueryFileInterpreter(execMongo, MongoDbQScriptPlanner.plan[Fix, MongoDbIO])
   }
 
   def run[C, S[_]](
@@ -80,14 +80,15 @@ object queryfile {
   }
 }
 
-final case class QueryContext(
+final case class QueryContext[M[_]](
   model: MongoQueryModel,
-  statistics: Collection => Option[CollectionStatistics])
+  statistics: Collection => Option[CollectionStatistics],
+  listContents: Option[qscript.ConvertPath.ListContents[M]])
 
 
 private final class QueryFileInterpreter[C](
   execMongo: WorkflowExecutor[MongoDbIO, C],
-  plan: (Fix[LogicalPlan], QueryContext) => EitherT[WriterT[MongoDbIO, PhaseResults, ?], FileSystemError, workflow.Crystallized[workflow.WorkflowF]])(
+  plan: (Fix[LogicalPlan], QueryContext[MongoDbIO]) => EitherT[WriterT[MongoDbIO, PhaseResults, ?], FileSystemError, workflow.Crystallized[workflow.WorkflowF]])(
   implicit C: DataCursor[MongoDbIO, C]
 ) extends (QueryFile ~> queryfileTypes.MongoQuery[C, ?]) {
 
@@ -145,7 +146,7 @@ private final class QueryFileInterpreter[C](
                      .eval(0).run
       out =  Js.Stmts(stmts.toList).pprint(0)
       ep  <- EitherT.fromDisjunction[MongoLogWF](
-               r.as(ExecutionPlan(MongoDBFsType, out)))
+               r.as(ExecutionPlan(FsType, out)))
       _   <- logProgram(stmts).liftM[FileSystemErrT]
     } yield ep).run.run
 
@@ -205,7 +206,8 @@ private final class QueryFileInterpreter[C](
   private val liftMQ: MQ ~> MongoLogWFR =
     liftMT[MongoLogWF, FileSystemErrT] compose liftMT[MQ, PhaseResultT]
 
-  private def queryContext(lp: Fix[LogicalPlan]): MongoLogWFR[QueryContext] = {
+  private def queryContext(lp: Fix[LogicalPlan]):
+      MongoLogWFR[QueryContext[MongoDbIO]] = {
     def lift[A](fa: FileSystemErrT[MongoDbIO, A]): MongoLogWFR[A] =
       EitherT[MongoLogWF, FileSystemError, A](
         fa.run.liftM[QRT].liftM[PhaseResultT])
@@ -218,7 +220,7 @@ private final class QueryFileInterpreter[C](
 
     lift((MongoDbIO.serverVersion.liftM[FileSystemErrT] |@| stats)((vers, stats) =>
       QueryContext(
-        MongoQueryModel(vers), stats.get(_))))
+        MongoQueryModel(vers), stats.get(_), listContents.some)))
   }
 
   private def convertPlanR(lp: Fix[LogicalPlan]): PlanR ~> MongoLogWFR =

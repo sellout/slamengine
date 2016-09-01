@@ -19,6 +19,7 @@ package quasar.physical.mongodb
 import quasar.Predef._
 import quasar._, RenderTree.ops._
 import quasar.fp._
+import quasar.fs.FileSystemError
 import quasar.javascript._
 import quasar.physical.mongodb.accumulator._
 import quasar.physical.mongodb.expression._
@@ -39,14 +40,13 @@ import pathy.Path._
 import scalaz._, Scalaz._
 import quasar.specs2.QuasarMatchers._
 
-class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.ScalaCheck with CompilerHelpers {
+class PlannerQScriptSpec extends org.specs2.mutable.Specification with org.specs2.ScalaCheck with CompilerHelpers {
   import StdLib.{set => s, _}
   import structural._
   import LogicalPlan._
   import Grouped.grouped
   import Reshape.reshape
   import jscore._
-  import Planner._
   import CollectionUtil._
 
   type EitherWriter[E, A] = EitherT[Writer[Vector[PhaseResult], ?], E, A]
@@ -72,32 +72,31 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
 
   def queryPlanner(expr: Fix[Sql], model: MongoQueryModel, stats: Collection => Option[CollectionStatistics]) =
     queryPlan(expr, Variables.empty, basePath, 0L, None)
-      .leftMap[CompilationError](CompilationError.ManyErrors(_))
-      // TODO: Would be nice to error on Constant plans here, but property
-      // tests currently run into that.
+      .leftMap[FileSystemError](
+        es => scala.sys.error(s"""query planning failed: ${es.map(_.shows).toList.mkString(", ")}"""))
       .flatMap(_.fold(
-        e => scala.sys.error("query evaluated to a constant, this won’t get to the backend"),
-        lp => MongoDbPlanner.plan(lp, fs.QueryContext(model, stats, None)).leftMap(CPlannerError(_))))
+        _ => scala.sys.error("query evaluated to a constant, this won’t get to the backend"),
+        MongoDbQScriptPlanner.plan[Fix, Id](_, fs.QueryContext(model, stats, None))))
 
   def plan0(query: String, model: MongoQueryModel, stats: Collection => Option[CollectionStatistics])
-      : Either[CompilationError, Crystallized[WorkflowF]] = {
+      : Either[FileSystemError, Crystallized[WorkflowF]] = {
     fixParser.parse(Query(query)).fold(
       e => scala.sys.error("parsing error: " + e.message),
       queryPlanner(_, model, stats).run).value.toEither
   }
 
-  def plan2_6(query: String): Either[CompilationError, Crystallized[WorkflowF]] =
+  def plan2_6(query: String): Either[FileSystemError, Crystallized[WorkflowF]] =
     plan0(query, MongoQueryModel.`2.6`, κ(None))
 
-  def plan(query: String): Either[CompilationError, Crystallized[WorkflowF]] =
+  def plan(query: String): Either[FileSystemError, Crystallized[WorkflowF]] =
     plan0(query, MongoQueryModel.`3.2`, κ(CollectionStatistics(10, 100, false).some))
 
-  def plan(logical: Fix[LogicalPlan]): Either[PlannerError, Crystallized[WorkflowF]] = {
+  def plan(logical: Fix[LogicalPlan]): Either[FileSystemError, Crystallized[WorkflowF]] = {
     (for {
       _          <- emit(Vector(PhaseResult.Tree("Input", logical.render)), ().right)
-      simplified <- emit(Vector.empty, \/-(Optimizer.simplify(logical))): EitherWriter[PlannerError, Fix[LogicalPlan]]
+      simplified <- emit(Vector.empty, Optimizer.simplify(logical).right)
       _          <- emit(Vector(PhaseResult.Tree("Simplified", logical.render)), ().right)
-      phys       <- MongoDbPlanner.plan(simplified, fs.QueryContext(MongoQueryModel.`3.2`, κ(None), None))
+      phys       <- MongoDbQScriptPlanner.plan[Fix, Id](simplified, fs.QueryContext(MongoQueryModel.`3.2`, κ(None), None))
     } yield phys).run.value.toEither
   }
 
@@ -3788,12 +3787,14 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
     fixParser.parse(q).fold(κ(Stream.empty), SS.shrink(_).map(sel => Query(pprint(sel))))
   }
 
-  /**
-   Shrink a query by reducing the number of projections or grouping expressions. Do not
-   change the "shape" of the query, by removing the group by entirely, etc.
-   */
+  /** Shrink a query by reducing the number of projections or grouping
+    * expressions. Do not change the "shape" of the query, by removing the group
+    * by entirely, etc.
+    */
   implicit def shrinkExpr: Shrink[Fix[Sql]] = {
-    /** Shrink a list, removing a single item at a time, but never producing an empty list. */
+    /** Shrink a list, removing a single item at a time, but never producing an
+      * empty list.
+      */
     def shortened[A](as: List[A]): Stream[List[A]] =
       if (as.length <= 1) Stream.empty
       else as.toStream.map(a => as.filterNot(_ == a))
@@ -3926,95 +3927,6 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
             reshape("value" -> $field("_id", "0")),
             ExcludeId)))
     }
-  }
-
-  "alignJoinsƒ" should {
-    "leave well enough alone" in {
-      MongoDbPlanner.alignJoinsƒ(
-        InvokeF(s.InnerJoin,
-          Func.Input3(Free('left), Free('right),
-            relations.And[FLP](
-              relations.Eq[FLP](
-                ObjectProject(Free('left), Constant(Data.Str("foo"))),
-                ObjectProject(Free('right), Constant(Data.Str("bar")))),
-              relations.Eq[FLP](
-                ObjectProject(Free('left), Constant(Data.Str("baz"))),
-                ObjectProject(Free('right), Constant(Data.Str("zab")))))))) must
-      beRightDisjunction(
-        Fix(s.InnerJoin[FLP](Free('left), Free('right),
-          relations.And[FLP](
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("foo"))),
-              ObjectProject(Free('right), Constant(Data.Str("bar")))),
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("baz"))),
-              ObjectProject(Free('right), Constant(Data.Str("zab"))))))))
-    }
-
-    "swap a reversed condition" in {
-      MongoDbPlanner.alignJoinsƒ(
-        InvokeF(s.InnerJoin,
-          Func.Input3(Free('left), Free('right),
-            relations.And[FLP](
-              relations.Eq[FLP](
-                ObjectProject(Free('right), Constant(Data.Str("bar"))),
-                ObjectProject(Free('left), Constant(Data.Str("foo")))),
-              relations.Eq[FLP](
-                ObjectProject(Free('left), Constant(Data.Str("baz"))),
-                ObjectProject(Free('right), Constant(Data.Str("zab")))))))) must
-      beRightDisjunction(
-        Fix(s.InnerJoin[FLP](Free('left), Free('right),
-          relations.And[FLP](
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("foo"))),
-              ObjectProject(Free('right), Constant(Data.Str("bar")))),
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("baz"))),
-              ObjectProject(Free('right), Constant(Data.Str("zab"))))))))
-    }
-
-    "swap multiple reversed conditions" in {
-      MongoDbPlanner.alignJoinsƒ(
-        InvokeF(s.InnerJoin,
-          Func.Input3(Free('left), Free('right),
-            relations.And[FLP](
-              relations.Eq[FLP](
-                ObjectProject(Free('right), Constant(Data.Str("bar"))),
-                ObjectProject(Free('left), Constant(Data.Str("foo")))),
-              relations.Eq[FLP](
-                ObjectProject(Free('right), Constant(Data.Str("zab"))),
-                ObjectProject(Free('left), Constant(Data.Str("baz")))))))) must
-      beRightDisjunction(
-        Fix(s.InnerJoin[FLP](Free('left), Free('right),
-          relations.And[FLP](
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("foo"))),
-              ObjectProject(Free('right), Constant(Data.Str("bar")))),
-            relations.Eq[FLP](
-              ObjectProject(Free('left), Constant(Data.Str("baz"))),
-              ObjectProject(Free('right), Constant(Data.Str("zab"))))))))
-    }
-
-    "fail with “mixed” conditions" in {
-      MongoDbPlanner.alignJoinsƒ(
-        InvokeF(s.InnerJoin,
-          Func.Input3(Free('left), Free('right),
-            relations.And[FLP](
-              relations.Eq[FLP](
-                math.Add[FLP](
-                  ObjectProject(Free('right), Constant(Data.Str("bar"))),
-                  ObjectProject(Free('left), Constant(Data.Str("baz")))),
-                ObjectProject(Free('left), Constant(Data.Str("foo")))),
-              relations.Eq[FLP](
-                ObjectProject(Free('left), Constant(Data.Str("baz"))),
-                ObjectProject(Free('right), Constant(Data.Str("zab")))))))) must
-      beLeftDisjunction(UnsupportedJoinCondition(
-        relations.Eq[FLP](
-          math.Add[FLP](
-            ObjectProject(Free('right), Constant(Data.Str("bar"))),
-            ObjectProject(Free('left), Constant(Data.Str("baz")))),
-          ObjectProject(Free('left), Constant(Data.Str("foo"))))))
-    }
 
     "plan with extra squash and flattening" in {
       // NB: this case occurs when a view's LP is embedded in a larger query (See SD-1403),
@@ -4035,22 +3947,22 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
             identity.Squash[FLP](
               makeObj(
                 "city" ->
-                ObjectProject[FLP](
-                  s.Filter[FLP](
-                    Free('tmp0),
-                    string.Search[FLP](
-                      FlattenArray[FLP](
-                        LogicalPlan.Let(
-                          'check1,
-                          ObjectProject(Free('tmp0), Constant(Data.Str("loc"))),
-                          LogicalPlan.Typecheck(
-                            Free('check1),
-                            Type.FlexArr(0, None, Type.Str),
-                            Free('check1),
-                            Constant(Data.Arr(List(Data.NA)))))),
-                      Constant(Data.Str("^.*MONT.*$")),
-                      Constant(Data.Bool(false)))),
-                  Constant(Data.Str("city")))))))
+                  ObjectProject[FLP](
+                    s.Filter[FLP](
+                      Free('tmp0),
+                      string.Search[FLP](
+                        FlattenArray[FLP](
+                          LogicalPlan.Let(
+                            'check1,
+                            ObjectProject(Free('tmp0), Constant(Data.Str("loc"))),
+                            LogicalPlan.Typecheck(
+                              Free('check1),
+                              Type.FlexArr(0, None, Type.Str),
+                              Free('check1),
+                              Constant(Data.Arr(List(Data.NA)))))),
+                        Constant(Data.Str("^.*MONT.*$")),
+                        Constant(Data.Bool(false)))),
+                    Constant(Data.Str("city")))))))
 
       plan(lp) must beWorkflow(chain[Workflow](
         $read(collection("db", "zips")),
@@ -4097,17 +4009,27 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
           reshape("city" -> $field("_id", "0")),
           IgnoreId)))
     }
-  }
+    }
 
   "planner log" should {
     "include all phases when successful" in {
       planLog("select city from zips").map(_.map(_.name)) must
-        beRightDisjunction(Vector(
-          "SQL AST", "Variables Substituted", "Absolutized", "Annotated Tree",
-          "Logical Plan", "Optimized", "Typechecked",
-          "Logical Plan (reduced typechecks)", "Logical Plan (aligned joins)",
-          "Logical Plan (projections preferred)", "Workflow Builder",
-          "Workflow (raw)", "Workflow (crystallized)"))
+      beRightDisjunction(Vector(
+          // frontend
+          "SQL AST",
+          "Variables Substituted",
+          "Absolutized",
+          "Annotated Tree",
+          "Logical Plan",
+          // core
+          "Optimized",
+          "Typechecked",
+          "QScript",
+          // backend
+          "QScript (Mongo-specific)",
+          "Workflow Builder",
+          "Workflow (raw)",
+          "Workflow (crystallized)"))
     }
 
     "include correct phases with type error" in {
@@ -4121,8 +4043,7 @@ class PlannerSpec extends org.specs2.mutable.Specification with org.specs2.Scala
         beRightDisjunction(Vector(
           "SQL AST", "Variables Substituted", "Absolutized", "Annotated Tree",
           "Logical Plan", "Optimized", "Typechecked",
-          "Logical Plan (reduced typechecks)", "Logical Plan (aligned joins)",
-          "Logical Plan (projections preferred)"))
+          "QScript", "QScript (Mongo-specific)"))
     }
   }
 }

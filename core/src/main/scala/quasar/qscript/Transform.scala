@@ -597,6 +597,20 @@ class Transform[T[_[_]]: Recursive: Corecursive: FunctorT: EqualT: ShowT, F[_]: 
         if func.effect ≟ Reduction =>
       invokeReduction2(func, Func.Input2(a1, a2)).right
 
+    case LogicalPlan.InvokeFUnapply(set.Distinct, Sized(a1)) =>
+      EnvT((a1.project.ask, QC.inj(Distinct(a1, HoleF)))).right
+
+    case LogicalPlan.InvokeFUnapply(set.DistinctBy, Sized(a1, a2)) =>
+      val (src, buckets, lval, rval) = autojoin(a1, a2)
+
+      EnvT((
+        Ann[T](buckets, HoleF[T]),
+        QC.inj(Map(
+          EnvT((
+            EmptyAnn[T],
+            QC.inj(Distinct(EnvT((EmptyAnn[T], src)).embed, rval)))).embed,
+          lval)))).right
+
     case LogicalPlan.InvokeFUnapply(set.Take, Sized(a1, a2)) =>
       val (src, buckets, lval, rval) = autojoin(a1, a2)
       val left: F[Free[F, Hole]] = QC.inj(Map[T, Free[F, Hole]](Free.point[F, Hole](SrcHole), lval))

@@ -54,13 +54,14 @@ object ReduceIndex {
   * expression, `reducers` applies the provided reduction to each expression,
   * and repair finally turns those reduced expressions into a final value.
   *
+  * ReduceIndex is guaranteed to be a valid index into `reducers`.
   * @group MRA
   */
 // TODO: type level guarantees about indexing with `repair` into `reducers`
 @Lenses final case class Reduce[T[_[_]], A](
   src: A,
   bucket: FreeMap[T],
-  reducers: List[ReduceFunc[FreeMap[T]]],
+  reducers: List[ReduceFunc[FreeMap[T]]], // FIXME: Use Vector instead
   repair: Free[MapFunc[T, ?], ReduceIndex])
     extends QScriptCore[T, A]
 
@@ -72,9 +73,10 @@ object ReduceIndex {
   *     (Sort :+: QScript)#λ => QScript
   * so that a backend without a native sort could eliminate this node.
   */
+// FIXME: Mention stable/unstable sorting in docs
 @Lenses final case class Sort[T[_[_]], A](
   src: A,
-  bucket: FreeMap[T],
+  bucket: FreeMap[T], // FIXME: Rename to Lambda
   order: List[(FreeMap[T], SortDir)])
     extends QScriptCore[T, A]
 
@@ -82,6 +84,11 @@ object ReduceIndex {
   * must evaluate to a boolean value for each element in the set).
   */
 @Lenses final case class Filter[T[_[_]], A](src: A, f: FreeMap[T])
+    extends QScriptCore[T, A]
+
+/** Eliminates all but the first entry for each key.
+  */
+@Lenses final case class Distinct[T[_[_]], A](src: A, key: FreeMap[T])
     extends QScriptCore[T, A]
 
 @Lenses final case class Take[T[_[_]], A](src: A, from: FreeQS[T], count: FreeQS[T])
@@ -117,6 +124,7 @@ object QScriptCore {
           case Reduce(a, b, func, repair) => f(a) ∘ (Reduce(_, b, func, repair))
           case Sort(a, b, o)              => f(a) ∘ (Sort(_, b, o))
           case Filter(a, func)            => f(a) ∘ (Filter(_, func))
+          case Distinct(a, key)           => f(a) ∘ (Distinct(_, key))
           case Take(a, from, c)           => f(a) ∘ (Take(_, from, c))
           case Drop(a, from, c)           => f(a) ∘ (Drop(_, from, c))
         }
@@ -141,6 +149,9 @@ object QScriptCore {
           case Filter(a, func) => Cord("Filter(") ++
             s.show(a) ++ Cord(",") ++
             func.show ++ Cord(")")
+          case Distinct(a, key) => Cord("Distinct(") ++
+            s.show(a) ++ Cord(",") ++
+            key.show ++ Cord(")")
           case Take(a, f, c) => Cord("Take(") ++
             s.show(a) ++ Cord(",") ++
             f.show ++ Cord(",") ++
@@ -191,7 +202,8 @@ object QScriptCore {
                 EnvT((Ann(b2, v2), Reduce(_, bucket2, func2, rep2)))) =>
             val funcL = func1.map(_.map(_ >> left))
             val funcR = func1.map(_.map(_ >> right))
-            // val (newRep, lrep, rrep) = concat(rep1, rep2.map(_ + func1.length))
+            val (newRep, lrep, rrep) =
+              concat(rep1, rep2.map(ri => ReduceIndex(ri.idx + func1.length)))
             val mapL = bucket1 >> left
             val mapR = bucket2 >> right
 
@@ -200,13 +212,10 @@ object QScriptCore {
                 EnvT((Ann(b1, HoleF),
                   Reduce(Extern,
                     mapL,
-                    // FIXME: Concat these things!
-                    func1, // for { f1 <- funcL; f2 <- funcR } yield f1 ++ f2,
-                    rep1 // newRep
-                  ): QScriptCore[T, ExternallyManaged])),
-                HoleF, // lrep,
-                HoleF // rrep
-              ))
+                    func1 ++ func2,
+                    newRep): QScriptCore[T, ExternallyManaged])),
+                lrep,
+                rrep))
 
           case (_, _) => None
         }
@@ -235,6 +244,7 @@ object QScriptCore {
           case Sort(src, bucket, order) =>
             Sort(src, normalizeMapFunc(bucket), order.map(_.leftMap(normalizeMapFunc(_))))
           case Filter(src, f) => Filter(src, normalizeMapFunc(f))
+          case Distinct(src, key) => Distinct(src, normalizeMapFunc(key))
           case Take(src, from, count) =>
             Take(
               src,

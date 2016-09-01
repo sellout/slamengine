@@ -44,7 +44,7 @@ class MongoDbIOSpec extends QuasarSpecification {
 
   def clientShould(examples: (ADir, MongoClient, MongoClient) => Fragment): Unit =
     TestConfig.testDataPrefix.flatMap { prefix =>
-      cfgs(MongoDBFsType).map(_ traverse_[Id] { case (name, setupUri, testUri) =>
+      cfgs(FsType).map(_ traverse_[Id] { case (name, setupUri, testUri) =>
         (connect(setupUri) |@| connect(testUri)) { (setupClient, testClient) =>
           s"${name.name}" should examples(prefix, setupClient, testClient)
 

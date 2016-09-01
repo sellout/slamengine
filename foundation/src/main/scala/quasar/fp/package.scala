@@ -527,7 +527,8 @@ package object fp
     * type).
     */
   def interpret[F[_], A, B](f: A => B, φ: Algebra[F, B]):
-      Algebra[CoEnv[A, F, ?], B] =
+      Algebra[CoEnv[A, F, ?], B] = //  A \/ F[?]
+                                   // Free[F, A] = Fix[CoEnv[A, F, ?]]
     interpretM[Id, F, A, B](f, φ)
 
   def interpretM[M[_], F[_], A, B](f: A => M[B], φ: AlgebraM[M, F, B]):

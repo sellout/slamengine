@@ -26,7 +26,6 @@ import quasar.namegen._
 import quasar.physical.mongodb.WorkflowBuilder._
 import quasar.physical.mongodb.accumulator._
 import quasar.physical.mongodb.expression._
-import quasar.physical.mongodb.fs.listContents
 import quasar.physical.mongodb.workflow._
 import quasar.qscript._
 import quasar.std.StdLib._, string._ // TODO: remove this
@@ -195,6 +194,7 @@ object MongoDbQScriptPlanner {
       case ConcatMaps(a1, a2) => unimplemented
       case ProjectField($var(DocField(base)), $literal(Bson.Text(field))) =>
         $var(DocField(base \ BsonField.Name(field))).right
+      case ProjectField(a1, a2) => unimplemented
       case ProjectIndex(a1, a2)  => unimplemented
       case DeleteField(a1, a2)  => unimplemented
 
@@ -406,7 +406,9 @@ object MongoDbQScriptPlanner {
         Call(Select(a1, "substr"), List(a2, a3)).right
       // case ToId(a1) => Call(ident("ObjectId"), List(a1)).right
 
-      case MakeArray(a1) => unimplemented
+      case MakeArray(a1) => Arr(List(a1)).right
+      // FIXME: handle non-literals
+      case MakeMap(Literal(Js.Str(str)), a2) => Obj(ListMap(Name(str) -> a2)).right
       case MakeMap(a1, a2) => unimplemented
       case ConcatArrays(a1, a2) => BinOp(jscore.Add, a1, a2).right
       case ConcatMaps(a1, a2) => unimplemented
@@ -729,7 +731,8 @@ object MongoDbQScriptPlanner {
         implicit I: WorkflowOpCoreF :<: WF,
                  ev: Show[WorkflowBuilder[WF]],
                  WB: WorkflowBuilder.Ops[WF]) = {
-        case LeftShift(src, struct, repair) => unimplemented
+        case LeftShift(src, struct, repair) =>
+          src.point[StateT[OutputM, NameGen, ?]]
         // (getExprBuilder(src, struct) ⊛ getJsMerge(repair))(
         //   (expr, jm) => WB.jsExpr(List(src, WB.flattenMap(expr)), jm))
         case Union(src, lBranch, rBranch) => unimplemented
@@ -766,6 +769,9 @@ object MongoDbQScriptPlanner {
             WB.filter(src, List(cond), {
               case f :: Nil => Selector.Doc(f -> Selector.Eq(Bson.Bool(true)))
             })).liftM[GenT]
+        case Distinct(src, key) =>
+          getExprBuilder(src, key).liftM[GenT] >>= (k =>
+            WB.distinctBy(src, List(k)))
         case Take(src, from, count) =>
           (rebaseWB(joinHandler, from, src) ⊛
             (rebaseWB(joinHandler, count, src) >>= (HasInt(_).liftM[GenT])))(
@@ -826,7 +832,7 @@ object MongoDbQScriptPlanner {
         implicit I: WorkflowOpCoreF :<: WF,
                  ev: Show[WorkflowBuilder[WF]],
                  WB: WorkflowBuilder.Ops[WF]) =
-        κ(unimplemented)
+        _ => ???
     }
 
   implicit def coproduct[T[_[_]], F[_], G[_]](
@@ -930,14 +936,22 @@ object MongoDbQScriptPlanner {
   type GenT[X[_], A]  = StateT[X, NameGen, A]
 
   def plan0[T[_[_]]: Recursive: Corecursive: EqualT: ShowT,
+            QS[_]: Traverse: Normalizable,
             WF[_]: Functor: Coalesce: Crush: Crystallize](
     joinHandler: JoinHandler[WF, WorkflowBuilder.M])(
-    lp: T[LogicalPlan])(
-    implicit I: WorkflowOpCoreF :<: WF,
-             ev: Show[WorkflowBuilder[WF]],
-             WB: WorkflowBuilder.Ops[WF],
-             R: RenderTree[Fix[WF]]):
-      EitherT[WriterT[MongoDbIO, PhaseResults, ?], FileSystemError, Crystallized[WF]] = {
+    qs: T[QS])
+    (implicit
+      TJ: ThetaJoin[T, ?] :<: QS,
+      QC: QScriptCore[T, ?] :<: QS,
+      R: Const[Read, ?] :<: QS,
+      EJ: EquiJoin[T, ?] :<: QS,
+      P: Planner.Aux[T, QS],
+      I: WorkflowOpCoreF :<: WF,
+      ev: Show[WorkflowBuilder[WF]],
+      WB: WorkflowBuilder.Ops[WF],
+      RQ: RenderTree[T[QS]],
+      RW: RenderTree[Fix[WF]])
+      : EitherT[Writer[PhaseResults, ?], FileSystemError, Crystallized[WF]] = {
     val optimize = new Optimize[T]
 
     // TODO[scalaz]: Shadow the scalaz.Monad.monadMTMAB SI-2712 workaround
@@ -946,64 +960,64 @@ object MongoDbQScriptPlanner {
     // NB: Locally add state on top of the result monad so everything
     //     can be done in a single for comprehension.
     type PlanT[X[_], A] = EitherT[X, FileSystemError, A]
-    type W[A]           = WriterT[MongoDbIO, PhaseResults, A]
+    type W[A]           = Writer[PhaseResults, A]
     type F[A]           = PlanT[W, A]
-    type M[A]           = GenT[F, A]
+    type GenF[A]        = GenT[F, A]
 
-    def log[A: RenderTree](label: String)(ma: M[A]): M[A] =
+    def log[A: RenderTree](label: String)(ma: GenF[A]): GenF[A] =
       ma flatMap { a =>
         val result = PhaseResult.Tree(label, RenderTree[A].render(a))
-        (WriterT((Vector(result): PhaseResults, a).point[MongoDbIO])).liftM[PlanT].liftM[GenT]
+        (Writer(Vector(result): PhaseResults, a)).liftM[PlanT].liftM[GenT]
       }
 
-    def swizzle[A](sa: StateT[PlannerError \/ ?, NameGen, A]): M[A] =
-      StateT[F, NameGen, A](ng => EitherT(sa.run(ng).leftMap(FileSystemError.planningFailed(lp.convertTo[Fix], _)).point[W]))
+    def swizzle[A](sa: StateT[PlannerError \/ ?, NameGen, A]): GenF[A] =
+      StateT[F, NameGen, A](ng => EitherT(sa.run(ng).leftMap(FileSystemError.qscriptPlanningFailed(_)).point[W]))
 
-    def liftError[A](ea: PlannerError \/ A): M[A] =
-      EitherT(ea.leftMap(FileSystemError.planningFailed(lp.convertTo[Fix], _)).point[W]).liftM[GenT]
-
-    val P = scala.Predef.implicitly[Planner.Aux[T, QScriptTotal[T, ?]]]
+    def liftError[A](ea: PlannerError \/ A): GenF[A] =
+      EitherT(ea.leftMap(FileSystemError.qscriptPlanningFailed(_)).point[W]).liftM[GenT]
 
     (for {
-      qs  <- QueryFile.convertToQScript[T, MongoDbIO](listContents.some)(lp).liftM[StateT[?[_], NameGen, ?]]
       // TODO: also need to prefer projections over deletions
       // NB: right now this only outputs one phase, but it’d be cool if we could
       //     interleave phase building in the composed recursion scheme
       opt <- log("QScript (Mongo-specific)")(liftError(
-        qs.transCataM[PlannerError \/ ?, QScriptTotal[T, ?]](tf =>
-          (liftFGM(assumeReadType[T, QScriptTotal[T, ?]](Type.Obj(ListMap(), Some(Type.Top)))) ⋘ liftFG(optimize.simplifyJoin[QScriptTotal[T, ?]])
+        qs.transCataM[PlannerError \/ ?, QS](tf =>
+          (liftFGM(assumeReadType[T, QS](Type.Obj(ListMap(), Some(Type.Top)))) ⋘ liftFG(optimize.simplifyJoin[QS])
           ).apply(tf) ∘
-            Normalizable[QScriptTotal[T, ?]].normalize)))
+            Normalizable[QS].normalize)))
       wb  <- log("Workflow Builder")(swizzle(opt.cataM[StateT[OutputM, NameGen, ?], WorkflowBuilder[WF]](P.plan(joinHandler) ∘ (_ ∘ (_ ∘ normalize)))))
       wf1 <- log("Workflow (raw)")         (swizzle(WorkflowBuilder.build(wb)))
-      wf2 <- log("Workflow (crystallized)")(Crystallize[WF].crystallize(wf1).point[M])
+      wf2 <- log("Workflow (crystallized)")(Crystallize[WF].crystallize(wf1).point[GenF])
     } yield wf2).evalZero
   }
 
-  /** Translate the QScript plan to an executable MongoDB "physical"
-    * plan, taking into account the current runtime environment as captured by
-    * the given context (which is for the time being just the "query model"
+  /** Translate the QScript plan to an executable MongoDB “physical” plan,
+    * taking into account the current runtime environment as captured by the
+    * given context (which is for the time being just the “query model”
     * associated with the backend version.)
+    *
     * Internally, the type of the plan being built constrains which operators
     * can be used, but the resulting plan uses the largest, common type so that
     * callers don't need to worry about it.
     */
-  def plan[T[_[_]]: Recursive: Corecursive: EqualT: ShowT](
-    logical: T[LogicalPlan], queryContext: fs.QueryContext):
-      EitherT[WriterT[MongoDbIO, PhaseResults, ?], FileSystemError, Crystallized[WorkflowF]] = {
+  def plan[T[_[_]]: Recursive: Corecursive: EqualT: ShowT, M[_]: Monad](
+    logical: T[LogicalPlan], queryContext: fs.QueryContext[M]):
+      EitherT[WriterT[M, PhaseResults, ?], FileSystemError, Crystallized[WorkflowF]] = {
     import MongoQueryModel._
 
-    queryContext.model match {
-      case `3.2` =>
-        val joinHandler =
-          JoinHandler.fallback(
-            JoinHandler.pipeline[Workflow3_2F](queryContext.statistics),
-            JoinHandler.mapReduce[Workflow3_2F])
-        plan0[T, Workflow3_2F](joinHandler)(logical)
+    QueryFile.convertToQScript[T, M](queryContext.listContents)(logical) >>= (qscript =>
+      EitherT(WriterT(
+        (queryContext.model match {
+          case `3.2` =>
+            val joinHandler =
+              JoinHandler.fallback(
+                JoinHandler.pipeline[Workflow3_2F](queryContext.statistics),
+                JoinHandler.mapReduce[Workflow3_2F])
+                plan0[T, QScriptTotal[T, ?], Workflow3_2F](joinHandler)(qscript)
 
-      case _     =>
-        val joinHandler = JoinHandler.mapReduce[Workflow2_6F]
-        plan0[T, Workflow2_6F](joinHandler)(logical).map(_.inject[WorkflowF])
-    }
+          case _     =>
+            val joinHandler = JoinHandler.mapReduce[Workflow2_6F]
+            plan0[T, QScriptTotal[T, ?], Workflow2_6F](joinHandler)(qscript).map(_.inject[WorkflowF])
+        }).run.run.point[M])))
   }
 }
