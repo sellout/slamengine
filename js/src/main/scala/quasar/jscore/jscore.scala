@@ -70,7 +70,7 @@ object JsCoreF {
   final case class LiteralF[A](value: Js.Lit) extends JsCoreF[A]
   final case class IdentF[A](name: Name) extends JsCoreF[A]
 
-  final case class AccessF[A](expr: A, key: A) extends JsCoreF[A]
+  final case class AccessF[A](expr: A, key: A) extends JsCoreF[A] 
   final case class CallF[A](callee: A, args: List[A]) extends JsCoreF[A]
   final case class NewF[A](name: Name, args: List[A]) extends JsCoreF[A]
   final case class IfF[A](condition: A, consequent: A, alternative: A) extends JsCoreF[A]

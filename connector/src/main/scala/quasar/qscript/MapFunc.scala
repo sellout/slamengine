@@ -295,27 +295,20 @@ object MapFunc {
         case Now() => G.point(Now[T, B]())
 
         // unary
-        case ExtractCentury(a1) => f(a1) ∘ (ExtractCentury(_))
         case ExtractDayOfMonth(a1) => f(a1) ∘ (ExtractDayOfMonth(_))
-        case ExtractDecade(a1) => f(a1) ∘ (ExtractDecade(_))
         case ExtractDayOfWeek(a1) => f(a1) ∘ (ExtractDayOfWeek(_))
         case ExtractDayOfYear(a1) => f(a1) ∘ (ExtractDayOfYear(_))
         case ExtractEpoch(a1) => f(a1) ∘ (ExtractEpoch(_))
         case ExtractHour(a1) => f(a1) ∘ (ExtractHour(_))
-        case ExtractIsoDayOfWeek(a1) => f(a1) ∘ (ExtractIsoDayOfWeek(_))
-        case ExtractIsoYear(a1) => f(a1) ∘ (ExtractIsoYear(_))
-        case ExtractMicroseconds(a1) => f(a1) ∘ (ExtractMicroseconds(_))
-        case ExtractMillennium(a1) => f(a1) ∘ (ExtractMillennium(_))
-        case ExtractMilliseconds(a1) => f(a1) ∘ (ExtractMilliseconds(_))
         case ExtractMinute(a1) => f(a1) ∘ (ExtractMinute(_))
         case ExtractMonth(a1) => f(a1) ∘ (ExtractMonth(_))
-        case ExtractQuarter(a1) => f(a1) ∘ (ExtractQuarter(_))
         case ExtractSecond(a1) => f(a1) ∘ (ExtractSecond(_))
         case ExtractTimezone(a1) => f(a1) ∘ (ExtractTimezone(_))
         case ExtractTimezoneHour(a1) => f(a1) ∘ (ExtractTimezoneHour(_))
         case ExtractTimezoneMinute(a1) => f(a1) ∘ (ExtractTimezoneMinute(_))
         case ExtractWeek(a1) => f(a1) ∘ (ExtractWeek(_))
         case ExtractYear(a1) => f(a1) ∘ (ExtractYear(_))
+        case ExtractYearOfWeek(a1) => f(a1) ∘ (ExtractIsoYear(_))
         case Date(a1) => f(a1) ∘ (Date(_))
         case Time(a1) => f(a1) ∘ (Time(_))
         case Timestamp(a1) => f(a1) ∘ (Timestamp(_))
@@ -381,27 +374,20 @@ object MapFunc {
         case (Now(), Now()) => true
 
         // unary
-        case (ExtractCentury(a1), ExtractCentury(a2)) => in.equal(a1, a2)
         case (ExtractDayOfMonth(a1), ExtractDayOfMonth(a2)) => in.equal(a1, a2)
-        case (ExtractDecade(a1), ExtractDecade(a2)) => in.equal(a1, a2)
         case (ExtractDayOfWeek(a1), ExtractDayOfWeek(a2)) => in.equal(a1, a2)
         case (ExtractDayOfYear(a1), ExtractDayOfYear(a2)) => in.equal(a1, a2)
         case (ExtractEpoch(a1), ExtractEpoch(a2)) => in.equal(a1, a2)
         case (ExtractHour(a1), ExtractHour(a2)) => in.equal(a1, a2)
-        case (ExtractIsoDayOfWeek(a1), ExtractIsoDayOfWeek(a2)) => in.equal(a1, a2)
-        case (ExtractIsoYear(a1), ExtractIsoYear(a2)) => in.equal(a1, a2)
-        case (ExtractMicroseconds(a1), ExtractMicroseconds(a2)) => in.equal(a1, a2)
-        case (ExtractMillennium(a1), ExtractMillennium(a2)) => in.equal(a1, a2)
-        case (ExtractMilliseconds(a1), ExtractMilliseconds(a2)) => in.equal(a1, a2)
         case (ExtractMinute(a1), ExtractMinute(a2)) => in.equal(a1, a2)
         case (ExtractMonth(a1), ExtractMonth(a2)) => in.equal(a1, a2)
-        case (ExtractQuarter(a1), ExtractQuarter(a2)) => in.equal(a1, a2)
         case (ExtractSecond(a1), ExtractSecond(a2)) => in.equal(a1, a2)
         case (ExtractTimezone(a1), ExtractTimezone(a2)) => in.equal(a1, a2)
         case (ExtractTimezoneHour(a1), ExtractTimezoneHour(a2)) => in.equal(a1, a2)
         case (ExtractTimezoneMinute(a1), ExtractTimezoneMinute(a2)) => in.equal(a1, a2)
         case (ExtractWeek(a1), ExtractWeek(a2)) => in.equal(a1, a2)
         case (ExtractYear(a1), ExtractYear(a2)) => in.equal(a1, a2)
+        case (ExtractYearOfWeek(a1), ExtractYearOfWeek(a2)) => in.equal(a1, a2)
         case (Date(a1), Date(b1)) => in.equal(a1, b1)
         case (Time(a1), Time(b1)) => in.equal(a1, b1)
         case (Timestamp(a1), Timestamp(b1)) => in.equal(a1, b1)
@@ -473,27 +459,20 @@ object MapFunc {
           case Now() => Cord("Now()")
 
           // unary
-          case ExtractCentury(a1) => shz("ExtractCentury", a1)
           case ExtractDayOfMonth(a1) => shz("ExtractDayOfMonth", a1)
-          case ExtractDecade(a1) => shz("ExtractDecade", a1)
           case ExtractDayOfWeek(a1) => shz("ExtractDayOfWeek", a1)
           case ExtractDayOfYear(a1) => shz("ExtractDayOfYear", a1)
           case ExtractEpoch(a1) => shz("ExtractEpoch", a1)
           case ExtractHour(a1) => shz("ExtractHour", a1)
-          case ExtractIsoDayOfWeek(a1) => shz("ExtractIsoDayOfWeek", a1)
-          case ExtractIsoYear(a1) => shz("ExtractIsoYear", a1)
-          case ExtractMicroseconds(a1) => shz("ExtractMicroseconds", a1)
-          case ExtractMillennium(a1) => shz("ExtractMillennium", a1)
-          case ExtractMilliseconds(a1) => shz("ExtractMilliseconds", a1)
           case ExtractMinute(a1) => shz("ExtractMinute", a1)
           case ExtractMonth(a1) => shz("ExtractMonth", a1)
-          case ExtractQuarter(a1) => shz("ExtractQuarter", a1)
           case ExtractSecond(a1) => shz("ExtractSecond", a1)
           case ExtractTimezone(a1) => shz("ExtractTimezone", a1)
           case ExtractTimezoneHour(a1) => shz("ExtractTimezoneHour", a1)
           case ExtractTimezoneMinute(a1) => shz("ExtractTimezoneMinute", a1)
           case ExtractWeek(a1) => shz("ExtractWeek", a1)
           case ExtractYear(a1) => shz("ExtractYear", a1)
+          case ExtractYearOfWeek(a1) => shz("ExtractYearOfWeek", a1)
           case Date(a1) => shz("Date", a1)
           case Time(a1) => shz("Time", a1)
           case Timestamp(a1) => shz("Timestamp", a1)
@@ -574,27 +553,20 @@ object MapFunc {
           case Now() => Terminal("Now" :: nt, None)
 
           // unary
-          case ExtractCentury(a1) => nAry("ExtractCentury", a1)
           case ExtractDayOfMonth(a1) => nAry("ExtractDayOfMonth", a1)
-          case ExtractDecade(a1) => nAry("ExtractDecade", a1)
           case ExtractDayOfWeek(a1) => nAry("ExtractDayOfWeek", a1)
           case ExtractDayOfYear(a1) => nAry("ExtractDayOfYear", a1)
           case ExtractEpoch(a1) => nAry("ExtractEpoch", a1)
           case ExtractHour(a1) => nAry("ExtractHour", a1)
-          case ExtractIsoDayOfWeek(a1) => nAry("ExtractIsoDayOfWeek", a1)
-          case ExtractIsoYear(a1) => nAry("ExtractIsoYear", a1)
-          case ExtractMicroseconds(a1) => nAry("ExtractMicroseconds", a1)
-          case ExtractMillennium(a1) => nAry("ExtractMillennium", a1)
-          case ExtractMilliseconds(a1) => nAry("ExtractMilliseconds", a1)
           case ExtractMinute(a1) => nAry("ExtractMinute", a1)
           case ExtractMonth(a1) => nAry("ExtractMonth", a1)
-          case ExtractQuarter(a1) => nAry("ExtractQuarter", a1)
           case ExtractSecond(a1) => nAry("ExtractSecond", a1)
           case ExtractTimezone(a1) => nAry("ExtractTimezone", a1)
           case ExtractTimezoneHour(a1) => nAry("ExtractTimezoneHour", a1)
           case ExtractTimezoneMinute(a1) => nAry("ExtractTimezoneMinute", a1)
           case ExtractWeek(a1) => nAry("ExtractWeek", a1)
           case ExtractYear(a1) => nAry("ExtractYear", a1)
+          case ExtractYearOfWeek(a1) => nAry("ExtractYearOfWeek", a1)
           case Date(a1) => nAry("Date", a1)
           case Time(a1) => nAry("Time", a1)
           case Timestamp(a1) => nAry("Timestamp", a1)
@@ -658,27 +630,20 @@ object MapFunc {
   }
 
   def translateUnaryMapping[T[_[_]], A]: UnaryFunc => A => MapFunc[T, A] = {
-    case date.ExtractCentury => ExtractCentury(_)
     case date.ExtractDayOfMonth => ExtractDayOfMonth(_)
-    case date.ExtractDecade => ExtractDecade(_)
     case date.ExtractDayOfWeek => ExtractDayOfWeek(_)
     case date.ExtractDayOfYear => ExtractDayOfYear(_)
     case date.ExtractEpoch => ExtractEpoch(_)
     case date.ExtractHour => ExtractHour(_)
-    case date.ExtractIsoDayOfWeek => ExtractIsoDayOfWeek(_)
-    case date.ExtractIsoYear => ExtractIsoYear(_)
-    case date.ExtractMicroseconds => ExtractMicroseconds(_)
-    case date.ExtractMillennium => ExtractMillennium(_)
-    case date.ExtractMilliseconds => ExtractMilliseconds(_)
     case date.ExtractMinute => ExtractMinute(_)
     case date.ExtractMonth => ExtractMonth(_)
-    case date.ExtractQuarter => ExtractQuarter(_)
     case date.ExtractSecond => ExtractSecond(_)
     case date.ExtractTimezone => ExtractTimezone(_)
     case date.ExtractTimezoneHour => ExtractTimezoneHour(_)
     case date.ExtractTimezoneMinute => ExtractTimezoneMinute(_)
     case date.ExtractWeek => ExtractWeek(_)
     case date.ExtractYear => ExtractYear(_)
+    case date.ExtractYearOfWeek => ExtractYearOfWeek(_)
     case date.Date => Date(_)
     case date.Time => Time(_)
     case date.Timestamp => Timestamp(_)
@@ -757,27 +722,20 @@ object MapFuncs {
 
   // date
   // See https://www.postgresql.org/docs/9.2/static/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT
-  @Lenses final case class ExtractCentury[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractDayOfMonth[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractDecade[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractDayOfWeek[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractDayOfYear[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractEpoch[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractHour[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractIsoDayOfWeek[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractIsoYear[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractMicroseconds[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractMillennium[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractMilliseconds[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractMinute[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractMonth[T[_[_]], A](a1: A) extends Unary[T, A]
-  @Lenses final case class ExtractQuarter[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractSecond[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractTimezone[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractTimezoneHour[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractTimezoneMinute[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractWeek[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class ExtractYear[T[_[_]], A](a1: A) extends Unary[T, A]
+  @Lenses final case class ExtractYearOfWeek[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class Date[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class Time[T[_[_]], A](a1: A) extends Unary[T, A]
   @Lenses final case class Timestamp[T[_[_]], A](a1: A) extends Unary[T, A]

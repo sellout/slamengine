@@ -84,24 +84,25 @@ class Transform
     val rval: JoinFunc = rann.values.as[JoinSide](RightSide)
     val SrcMerge(src, lBranch, rBranch) = merge.mergeT(left.value, right.value)
 
-    val lprovs = prov.genBuckets(lann.provenance) ∘ (_ ∘ (_.as[JoinSide](LeftSide)))
-    val rprovs = prov.genBuckets(rann.provenance) ∘ (_ ∘ (_.as[JoinSide](RightSide)))
+    val mehProvs = Zip[List].zipWith(lann.provenance, rann.provenance)(prov.joinKeys).map(_.unJoinKeys).join
+    val (lprovs, rprovs) =
+      Unzip[List].unzip(mehProvs)
 
     val (combine, newLprov, newRprov, lacc, racc) =
-      (lprovs, rprovs) match {
+      (prov.concatFreeMaps(lprovs) ∘ (_.as[JoinSide](LeftSide)), prov.concatFreeMaps(rprovs) ∘ (_.as[JoinSide](RightSide))) match {
         case (None, None) =>
           val (combine, lacc, racc) = concat(lval, rval)
           (combine, lann.provenance, rann.provenance, lacc, racc)
-        case (None, Some((rProvs, rBuck))) =>
+        case (None, Some(rBuck)) =>
           val (combine, bacc, lacc, racc) = concat3(rBuck, lval, rval)
-          (combine, lann.provenance, prov.rebase(bacc, rProvs), lacc, racc)
-        case (Some((lProvs, lBuck)), None) =>
+          (combine, lann.provenance, prov.rebase(bacc, rann.provenance), lacc, racc)
+        case (Some(lBuck), None) =>
           val (combine, bacc, lacc, racc) = concat3(lBuck, lval, rval)
-          (combine, prov.rebase(bacc, lProvs), rann.provenance, lacc, racc)
-        case (Some((lProvs, lBuck)), Some((rProvs, rBuck))) =>
+          (combine, prov.rebase(bacc, lann.provenance), rann.provenance, lacc, racc)
+        case (Some(lBuck), Some(rBuck)) =>
           val (combine, lbacc, rbacc, lacc, racc) =
             concat4(lBuck, rBuck, lval, rval)
-          (combine, prov.rebase(lbacc, lProvs), prov.rebase(rbacc, rProvs), lacc, racc)
+          (combine, prov.rebase(lbacc, lann.provenance), prov.rebase(rbacc, rann.provenance), lacc, racc)
       }
 
     AutoJoinResult(
